@@ -1,0 +1,659 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Credential Portal · Demo</title><style>
+  :root {
+    --bg:       #f8fafc;
+    --surface:  #ffffff;
+    --border:   #e2e8f0;
+    --accent:   #0066cc;
+    --green:    #059669;
+    --red:      #dc2626;
+    --text:     #0f172a;
+    --muted:    #64748b;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .participant-label {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    padding: 8px 16px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: rgba(0,102,204,0.05);
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* Navigation */
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-btn {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 14px 28px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover {
+    color: var(--text);
+    border-color: var(--text);
+  }
+  .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Main */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  .page { display: none; animation: fadeIn 0.2s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .page-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .page-sub {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: var(--text);
+  }
+
+  /* Form */
+  .form-group {
+    margin-bottom: 20px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 16px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
+  }
+  textarea { resize: vertical; min-height: 100px; }
+
+  /* Buttons */
+  .btn {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 16px 32px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 24px;
+  }
+
+  /* Result */
+  .result-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 24px;
+  }
+  .result-box.hidden { display: none; }
+  .result-box .ok  { color: var(--green); font-weight: 600; }
+  .result-box .err { color: var(--red); font-weight: 600; }
+  .result-box .key { color: var(--accent); }
+  .result-box .val { color: #b45309; }
+
+  /* VC Badge */
+  .vc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(5,150,105,0.08);
+    border: 1px solid rgba(5,150,105,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--green);
+  }
+  .vc-item .jwt-preview {
+    color: var(--muted);
+    font-size: 12px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Offer Card */
+  .offer-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    transition: all 0.15s;
+  }
+  .offer-card:hover {
+    border-color: var(--accent);
+  }
+  .offer-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .offer-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .policy-tag {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: rgba(0,102,204,0.1);
+    color: var(--accent);
+    padding: 8px 14px;
+    border-radius: 6px;
+  }
+
+  /* Pipeline */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 32px 0;
+  }
+  .pipeline-step {
+    flex: 1;
+    text-align: center;
+    padding: 28px 16px;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-family: var(--mono);
+    transition: all 0.3s;
+  }
+  .pipeline-step.done {
+    border-color: var(--green);
+    background: rgba(5,150,105,0.08);
+  }
+  .pipeline-step.active {
+    border-color: var(--accent);
+    background: rgba(0,102,204,0.08);
+  }
+  .pipeline-step.error {
+    border-color: var(--red);
+    background: rgba(220,38,38,0.05);
+  }
+  .step-num {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .step-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .step-status {
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 20px;
+  }
+  .pipeline-step.done .step-status { color: var(--green); }
+  .pipeline-step.active .step-status { color: var(--accent); }
+  .pipeline-step.error .step-status { color: var(--red); }
+
+  .pipeline-arrow {
+    width: 40px;
+    text-align: center;
+    font-size: 20px;
+    color: var(--border);
+    flex-shrink: 0;
+  }
+  .pipeline-arrow.lit { color: var(--accent); }
+
+  /* Table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .data-table td {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .badge-blue {
+    background: rgba(0,102,204,0.1);
+    color: var(--accent);
+  }
+  .badge-green {
+    background: rgba(5,150,105,0.1);
+    color: var(--green);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* JSON */
+  .json-key { color: var(--accent); }
+  .json-str { color: #b45309; }
+  .json-num { color: #c2410c; }
+  .json-bool { color: #7c3aed; }
+  .json-null { color: var(--muted); }
+
+  /* Negotiation Trace */
+  .neg-log-item {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .neg-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .neg-log-header:hover { background: #eef2f7; }
+  .neg-log-meta {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .neg-log-meta strong { color: var(--text); font-size: 14px; }
+  .neg-badge-ok {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(5,150,105,0.12);
+    color: var(--green);
+    border: 1px solid rgba(5,150,105,0.3);
+  }
+  .neg-badge-fail {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(220,38,38,0.10);
+    color: var(--red);
+    border: 1px solid rgba(220,38,38,0.25);
+  }
+  .neg-trace {
+    padding: 0 20px 20px;
+    display: none;
+  }
+  .neg-trace.open { display: block; }
+  .trace-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .trace-step:last-child { border-bottom: none; }
+  .trace-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .trace-icon.ok   { background: rgba(5,150,105,0.12); color: var(--green); border: 1.5px solid rgba(5,150,105,0.3); }
+  .trace-icon.fail { background: rgba(220,38,38,0.10); color: var(--red);   border: 1.5px solid rgba(220,38,38,0.25); }
+  .trace-body { flex: 1; }
+  .trace-name {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .trace-name.ok   { color: var(--green); }
+  .trace-name.fail { color: var(--red); }
+  .trace-detail {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .trace-detail .hi { color: var(--accent); font-weight: 500; }
+  .trace-detail .hi-fail { color: var(--red); font-weight: 500; }
+  .neg-log-empty {
+    text-align: center;
+    padding: 64px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .neg-log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .btn-sm {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+  /* inline trace panel inside cycle page */
+  .inline-trace {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: none;
+  }
+  .inline-trace.open { display: block; }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.hidden{display:none!important}:root{--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Consolas,monospace}body{line-height:1.55}main{max-width:1100px;padding-top:28px}.page-sub{font-family:var(--sans);margin-bottom:24px}.help{font-size:14px;color:var(--muted);margin:12px 0 18px;line-height:1.7}.notice{padding:14px 18px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px;margin-bottom:24px}.message{margin-top:16px;white-space:pre-wrap;font-size:14px}.table-scroll{overflow-x:auto}.data-table td{white-space:normal;overflow-wrap:anywhere;font-size:12px;vertical-align:top}.check-pass{color:#047857;font-weight:700}.check-fail{color:#dc2626;font-weight:700}.check-unknown{color:#a16207;font-weight:700}button:disabled{opacity:.45;cursor:not-allowed}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafc;padding:16px;font-size:12px;max-height:520px;overflow:auto;margin-top:16px}details{margin-top:20px}summary{cursor:pointer;color:var(--accent)}#connection{white-space:pre-wrap}.btn:not(.btn-primary){border:1px solid var(--border);background:white}.data-table th{white-space:nowrap}.data-table td:first-child{min-width:160px}.data-table td:last-child{min-width:260px}.btn{margin-top:6px}@media(max-width:700px){header{padding:18px;gap:12px;flex-wrap:wrap}.nav{padding:12px;gap:6px;flex-wrap:wrap}.nav-btn{padding:10px;font-size:12px}.card{padding:20px}.form-row{grid-template-columns:1fr}main{padding:20px 14px}.page-title{font-size:26px}.pipeline{flex-direction:column}.pipeline-arrow{transform:rotate(90deg)}}
+</style></head><body>
+<header><div class="logo"><span>OPTIMAL</span>.LOADS / Portal</div><div class="header-right"><span class="participant-label" id="participant-label">연결 중</span><span class="status" id="server-status">LOCAL DEMO</span></div></header>
+<nav class="nav" aria-label="주 메뉴">
+<button class="nav-btn active" data-page="account" onclick="showPage('account')">01 Account</button>
+<button class="nav-btn" data-page="vc" onclick="showPage('vc')">02 Credentials</button>
+<button class="nav-btn" data-page="assets" onclick="showPage('assets')">03 Services</button>
+<button class="nav-btn" data-page="catalog" onclick="showPage('catalog')">04 Catalog</button>
+<button class="nav-btn" data-page="cycle" onclick="showPage('cycle')">05 Request</button>
+</nav>
+<main>
+<div class="notice">NON-PRODUCTION · 외부 Wizard 자격증명으로 가져오기와 검증을 실험하는 로컬 데모입니다.</div>
+<div class="page active" id="page-account">
+<h1 class="page-title">Account</h1><p class="page-sub">계정을 만들어 로그인하면, 그 계정에 여러 개의 자격증명(VC) 세트를 연결하고 관리할 수 있습니다.</p>
+<div class="card"><div class="form-group"><label for="portal-target">연결할 포털</label><select id="portal-target" onchange="onTargetChange()"><option value="self">현재 포털</option><option value="http://localhost:8001">localhost:8001</option><option value="http://localhost:8002">localhost:8002</option></select></div>
+<p class="help">계정은 포털(포트)마다 별도로 저장됩니다. 포털을 바꾸면 다시 로그인해야 합니다.</p>
+<p class="help" id="account-status" style="font-weight:600">로그인되지 않음</p>
+<div id="logout-row" class="hidden btn-row"><button class="btn" onclick="logoutAccount()">로그아웃</button></div></div>
+<div class="card" id="login-card"><h2 class="card-title">로그인</h2>
+<div class="form-row"><div class="form-group"><label for="login-username">아이디</label><input id="login-username" autocomplete="username"></div>
+<div class="form-group"><label for="login-password">비밀번호</label><input id="login-password" type="password" autocomplete="current-password"></div></div>
+<button class="btn btn-primary" onclick="loginAccount()">로그인</button></div>
+<div class="card" id="register-card"><h2 class="card-title">회원가입</h2>
+<div class="form-row"><div class="form-group"><label for="reg-username">아이디 (영문/숫자/._- 3~32자)</label><input id="reg-username" autocomplete="username"></div>
+<div class="form-group"><label for="reg-password">비밀번호 (8자 이상)</label><input id="reg-password" type="password" autocomplete="new-password"></div></div>
+<div class="form-group"><label for="reg-password2">비밀번호 확인</label><input id="reg-password2" type="password" autocomplete="new-password"></div>
+<button class="btn btn-primary" onclick="registerAccount()">회원가입</button></div>
+<div id="account-message" class="message" role="status" aria-live="polite"></div>
+</div>
+<div class="page" id="page-vc">
+<h1 class="page-title">Credentials 가져오기</h1><p class="page-sub">외부 발급 → 내용 확인 → 서명 검증 → 데모 참여자 연결</p>
+<div class="card hidden" id="credentials-gate"><p class="help">Account 탭에서 먼저 로그인해주세요. 로그인한 계정에만 자격증명을 연결할 수 있습니다.</p></div>
+<div id="credentials-body" class="hidden">
+<div class="card"><h2 class="card-title">이미 발급받은 파일을 선택하세요</h2>
+<p class="help">권장: <strong>Signed VP + Compliance VC</strong> 2개. VC 4개 또는 ZIP + VP도 가능합니다.<br>VP 안의 VC는 자동 추출하며, 동일한 JWT는 한 번만 검사합니다. 가져온 세트는 현재 로그인한 계정에 연결되어 계속 남습니다.</p>
+<div class="form-group"><label for="credential-files">파일 선택 (.jwt / .zip, 총 8 MB 이하)</label><input id="credential-files" type="file" accept=".jwt,.zip" multiple></div>
+<div class="btn-row"><button class="btn btn-primary" id="import-button" onclick="importFiles()">가져오기 · 검증</button></div>
+<div id="import-message" class="message" role="status" aria-live="polite"></div>
+</div>
+<section class="card hidden" id="report-card"><h2 class="card-title">방금 가져온 결과</h2><div id="report-summary"></div><div id="report-checks" class="table-scroll"></div>
+<p class="help">‘확인 불가’는 통과가 아닙니다. 현재 데모는 서명·발급자·기본 구조·유효기간·세트 연결이 통과한 경우만 연결합니다. SHACL 전체 검증과 폐기·정지 조회는 아직 지원하지 않습니다.</p>
+<details><summary>JWT 헤더와 본문 보기</summary><pre id="document-json"></pre></details></section>
+<section class="card"><h2 class="card-title">내 계정에 연결된 자격증명</h2><div id="my-credentials-list" class="help">불러오는 중…</div></section>
+<div class="card"><h2 class="card-title">현재 데모 연결</h2><div id="connection" class="help">아직 연결된 참여자가 없습니다.</div></div>
+</div>
+</div>
+<div class="page" id="page-assets"><h1 class="page-title">서비스 등록</h1><p class="page-sub">현재 포털에서 제공할 데이터와 국가 조건을 설정합니다.</p>
+<div class="card"><div class="form-row"><div class="form-group"><label for="asset-name">서비스 이름</label><input id="asset-name" value="Busan Weather Demo" maxlength="160"></div><div class="form-group"><label for="asset-country">허용 국가 (2자리)</label><input id="asset-country" value="KR" maxlength="2"></div></div>
+<div class="form-group"><label for="asset-url">데이터 URL</label><input id="asset-url" value="demo://weather"></div><p class="help">demo://weather는 고정 샘플입니다. 실제 API는 README의 허용 origin 설정 후 연결하세요.</p>
+<button class="btn btn-primary" onclick="registerService()">서비스 등록</button><div id="asset-message" class="message" role="status"></div></div>
+<div class="card"><h2 class="card-title">등록된 서비스</h2><div id="asset-list"></div></div></div>
+<div class="page" id="page-catalog"><h1 class="page-title">서비스 탐색</h1><p class="page-sub">Credentials 화면에서 연결한 대상 포털의 서비스를 조회합니다.</p><div class="card"><p id="catalog-connection" class="help"></p><button class="btn btn-primary" onclick="queryCatalog()">카탈로그 조회</button><div id="catalog-message" class="message" role="status"></div><div id="catalog-list"></div></div></div>
+<div class="page" id="page-cycle"><h1 class="page-title">데이터 요청</h1><p class="page-sub">선택한 서비스의 정책 확인 → 데모 접근 승인 → 데이터 전송</p>
+<div class="card"><label for="service-select">요청할 서비스</label><select id="service-select"><option value="">카탈로그에서 먼저 서비스를 조회하세요</option></select><p class="help">국가 속성은 서버가 자격증명에서 읽습니다. 요청자 ID를 직접 입력하지 않습니다.</p>
+<button class="btn btn-primary" id="run-button" onclick="runCycle()">정책 확인 · 요청</button><div id="cycle-message" class="message" role="status"></div></div>
+<div class="card"><div class="pipeline"><div class="pipeline-step" id="step-policy"><div class="step-num">01</div><div class="step-name">정책 확인</div><div class="step-status">대기</div></div><div class="pipeline-arrow">→</div><div class="pipeline-step" id="step-grant"><div class="step-num">02</div><div class="step-name">데모 접근 승인</div><div class="step-status">대기</div></div><div class="pipeline-arrow">→</div><div class="pipeline-step" id="step-transfer"><div class="step-num">03</div><div class="step-name">데이터 전달</div><div class="step-status">대기</div></div></div><p class="help">접근 승인은 최대 15분 유효합니다. 양측 서명 DAC/DUA와 자동 예약 호출은 이번 MVP에 포함되지 않습니다.</p><pre id="cycle-result"></pre></div></div>
+</main>
+<script>
+'use strict';
+const state={record:null,target:location.origin,session:null,offerings:[],accountToken:null,username:null,myCredentials:[]};
+const $=id=>document.getElementById(id);
+const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function message(id,text,error=false){$(id).textContent=text;$(id).style.color=error?'var(--red)':'var(--muted)';}
+async function request(path,{base=location.origin,method='GET',body,token,local=false}={}){
+ const headers={};if(token)headers.Authorization='Bearer '+token;if(local)headers['X-Portal-Local']='1';
+ if(body && !(body instanceof FormData)){headers['Content-Type']='application/json';body=JSON.stringify(body);}
+ const r=await fetch(base+path,{method,headers,body});
+ let data;try{data=await r.json();}catch{throw new Error('서버 응답을 읽지 못했습니다');}
+ if(!r.ok)throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||data));return data;
+}
+function showPage(name){document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id==='page-'+name));document.querySelectorAll('.nav-btn').forEach(e=>e.classList.toggle('active',e.dataset.page===name));if(name==='assets')loadServices();if(name==='catalog')$('catalog-connection').textContent=state.session?state.target+' · '+state.session.summary.name:'Credentials 화면에서 먼저 연결해주세요';if(name==='vc'&&state.accountToken)loadMyCredentials();}
+function resetSession(){state.session=null;state.offerings=[];$('connection').textContent='아직 연결된 참여자가 없습니다.';$('service-select').innerHTML='<option value="">카탈로그에서 먼저 서비스를 조회하세요</option>';$('catalog-list').replaceChildren();}
+function renderReport(record){state.record=record;const r=record.report;$('report-card').classList.remove('hidden');
+ $('report-summary').innerHTML='<p class="help"><strong>'+escapeHTML(r.summary.name||'조직 정보 없음')+'</strong> · '+escapeHTML(r.summary.country||'-')+' · '+r.documents.length+'개 고유 문서</p><div class="notice">'+(r.eligible_for_demo?'핵심 검사 통과 · 제한된 데모 연결 가능':'연결 보류 · 실패 또는 서명 확인 불가 항목을 확인하세요')+'</div>';
+ const labels={pass:'통과',fail:'실패',unknown:'확인 불가'};
+ $('report-checks').innerHTML='<table class="data-table"><thead><tr><th>대상</th><th>검사</th><th>결과</th><th>설명</th></tr></thead><tbody>'+r.checks.map(c=>'<tr><td>'+escapeHTML(c.scope)+'</td><td>'+escapeHTML(c.name)+'</td><td><span class="check-'+c.status+'">'+labels[c.status]+'</span></td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table>';
+ $('document-json').textContent=JSON.stringify(r.documents,null,2);
+}
+async function importFiles(){if(!state.accountToken)return message('import-message','먼저 로그인해주세요',true);
+ const files=Array.from($('credential-files').files);if(!files.length)return message('import-message','파일을 선택해주세요',true);if(files.reduce((n,f)=>n+f.size,0)>8000000)return message('import-message','전체 8 MB 이하로 선택해주세요',true);
+ resetSession();state.record=null;$('report-card').classList.add('hidden');
+ const data=new FormData();files.forEach(f=>data.append('files',f));$('import-button').disabled=true;message('import-message','파일을 읽고 공개키를 조회하는 중입니다…');
+ try{renderReport(await request('/credentials/import',{base:state.target,method:'POST',body:data,token:state.accountToken,local:true}));message('import-message','가져오기 완료. 이 계정에 연결되었습니다.');await loadMyCredentials();}catch(e){message('import-message',e.message,true);}finally{$('import-button').disabled=false;}}
+async function loadMyCredentials(){if(!state.accountToken)return;
+ try{const data=await request('/accounts/me/credentials',{base:state.target,token:state.accountToken});renderMyCredentials(data.credentials);}catch(e){message('import-message',e.message,true);}}
+function renderMyCredentials(list){state.myCredentials=list;
+ $('my-credentials-list').innerHTML=list.length?list.map(c=>
+  '<div class="offer-card"><div><strong>'+escapeHTML(c.summary.name||'이름 없음')+'</strong><p class="help">'+escapeHTML(c.summary.country||'-')+' · '+(c.eligible_for_demo?'통과':'실패 / 확인 불가')+' · '+new Date(c.created*1000).toLocaleString()+'</p></div>'+
+  '<div class="btn-row"><button class="btn" onclick="recheckOne(\''+c.id+'\')">다시 검증</button><button class="btn btn-primary"'+(c.eligible_for_demo?'':' disabled')+' onclick="activateOne(\''+c.id+'\')">데모 참여자로 연결</button></div></div>'
+ ).join(''):'<p class="help">아직 연결된 자격증명이 없습니다. 위에서 파일을 가져와주세요.</p>';}
+async function recheckOne(id){message('import-message','공개키와 자격증명을 다시 확인하는 중입니다…');
+ try{renderReport(await request('/credentials/recheck',{base:state.target,method:'POST',body:{import_id:id},token:state.accountToken,local:true}));message('import-message','재검증 완료');await loadMyCredentials();}catch(e){message('import-message',e.message,true);}}
+async function activateOne(id){message('import-message','연결 전 다시 검증하는 중입니다…');
+ try{state.session=await request('/demo-sessions',{base:state.target,method:'POST',body:{import_id:id},token:state.accountToken,local:true});
+ $('connection').textContent=state.session.summary.name+' · '+state.session.summary.country+' · '+state.target+'\n'+state.session.participant_id+'\n'+new Date(state.session.expires_at*1000).toLocaleString()+'까지 (이 브라우저 탭에서 사용)';
+ message('import-message','데모 연결 완료. Catalog 탭에서 서비스를 조회하세요.');}catch(e){message('import-message',e.message,true);}}
+function onLoggedIn(){$('account-status').textContent='로그인됨: '+state.username+' · '+state.target;$('logout-row').classList.remove('hidden');$('login-card').classList.add('hidden');$('register-card').classList.add('hidden');
+ $('credentials-gate').classList.add('hidden');$('credentials-body').classList.remove('hidden');loadMyCredentials();}
+function onLoggedOut(){$('account-status').textContent='로그인되지 않음';$('logout-row').classList.add('hidden');$('login-card').classList.remove('hidden');$('register-card').classList.remove('hidden');
+ $('credentials-gate').classList.remove('hidden');$('credentials-body').classList.add('hidden');$('my-credentials-list').textContent='';resetSession();state.record=null;$('report-card').classList.add('hidden');}
+async function registerAccount(){const u=$('reg-username').value.trim(),p=$('reg-password').value,p2=$('reg-password2').value;
+ if(p!==p2)return message('account-message','비밀번호가 일치하지 않습니다',true);
+ try{await request('/accounts/register',{base:state.target,method:'POST',body:{username:u,password:p}});message('account-message','회원가입 완료. 로그인해주세요.');}catch(e){message('account-message',e.message,true);}}
+async function loginAccount(){const u=$('login-username').value.trim(),p=$('login-password').value;
+ try{const data=await request('/accounts/login',{base:state.target,method:'POST',body:{username:u,password:p}});
+ state.accountToken=data.access_token;state.username=data.username;onLoggedIn();message('account-message','로그인 완료: '+data.username);}catch(e){message('account-message',e.message,true);}}
+async function logoutAccount(){try{if(state.accountToken)await request('/accounts/logout',{base:state.target,method:'POST',token:state.accountToken});}catch(e){}
+ state.accountToken=null;state.username=null;onLoggedOut();message('account-message','로그아웃했습니다.');}
+function onTargetChange(){const val=$('portal-target').value;const next=val==='self'?location.origin:val;
+ if(next===state.target)return;state.target=next;
+ if(state.accountToken){state.accountToken=null;state.username=null;onLoggedOut();message('account-message','포털이 변경되어 로그아웃되었습니다. 이 포털에 계정으로 다시 로그인해주세요.');}}
+async function registerService(){try{await request('/service-offerings',{method:'POST',local:true,body:{name:$('asset-name').value.trim(),country:$('asset-country').value.trim().toUpperCase(),data_url:$('asset-url').value.trim()}});message('asset-message','등록 완료');await loadServices();}catch(e){message('asset-message',e.message,true);}}
+async function loadServices(){try{const data=await request('/service-offerings',{local:true});$('asset-list').innerHTML=data.services.length?data.services.map(s=>'<div class="offer-card"><div><strong>'+escapeHTML(s.name)+'</strong><p class="help">'+escapeHTML(s.data_url)+'</p></div><span class="policy-tag">'+escapeHTML(s.country)+'</span></div>').join(''):'<p class="help">아직 등록된 서비스가 없습니다.</p>';}catch(e){message('asset-message',e.message,true);}}
+function requireSession(){if(!state.session||state.session.expires_at*1000<=Date.now())throw new Error('Credentials 화면에서 데모 참여자를 먼저 연결해주세요');return state.session.access_token;}
+async function queryCatalog(){try{const data=await request('/catalog',{base:state.target,token:requireSession()});state.offerings=data.service_offerings;$('catalog-list').innerHTML=state.offerings.map(s=>'<div class="offer-card"><strong>'+escapeHTML(s.name)+'</strong><span class="policy-tag">허용 국가 '+escapeHTML(s.country)+'</span></div>').join('');$('service-select').innerHTML='<option value="">서비스 선택</option>'+state.offerings.map(s=>'<option value="'+escapeHTML(s.id)+'">'+escapeHTML(s.name)+' ('+escapeHTML(s.country)+')</option>').join('');message('catalog-message',state.offerings.length+'개 서비스 조회 완료. Request 탭에서 선택해주세요.');}catch(e){message('catalog-message',e.message,true);}}
+function step(id,status,text){const el=$('step-'+id);el.className='pipeline-step '+status;el.querySelector('.step-status').textContent=text;}
+async function runCycle(){let token;try{token=requireSession();if(!$('service-select').value)throw new Error('서비스를 먼저 선택해주세요');}catch(e){return message('cycle-message',e.message,true);}
+ $('run-button').disabled=true;$('cycle-result').textContent='';['policy','grant','transfer'].forEach(s=>step(s,'','대기'));step('policy','active','자격증명 재검증 중');message('cycle-message','요청 중입니다…');let phase='policy';
+ try{const grant=await request('/negotiate',{base:state.target,method:'POST',token,body:{service_offering_id:$('service-select').value}});step('policy','done','통과');step('grant','done','15분 이내 유효');phase='transfer';step('transfer','active','서버 검증 · 데이터 조회');const data=await request('/transfer',{base:state.target,method:'POST',token,body:{contract_id:grant.contract_id}});step('transfer','done','완료');$('cycle-result').textContent=JSON.stringify({grant,result:data},null,2);message('cycle-message','데이터를 받았습니다.');}catch(e){step(phase,'error','실패');message('cycle-message',e.message,true);}finally{$('run-button').disabled=false;}}
+request('/health').then(d=>{$('participant-label').textContent=d.name;$('server-status').textContent='ONLINE · '+d.port;}).catch(()=>{$('server-status').textContent='OFFLINE';});
+</script></body></html>
