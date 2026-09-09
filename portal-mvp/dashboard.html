@@ -542,7 +542,7 @@
 <div id="auth-gate">
 <main class="auth-main">
 <div class="notice">NON-PRODUCTION · 외부 Wizard 자격증명으로 가져오기와 검증을 실험하는 로컬 데모입니다.</div>
-<div class="card" id="login-card"><h2 class="card-title">로그인</h2>
+<!-- <div class="card" id="login-card"><h2 class="card-title">로그인</h2>
 <div class="form-row"><div class="form-group"><label for="login-username">아이디</label><input id="login-username" autocomplete="username"></div>
 <div class="form-group"><label for="login-password">비밀번호</label><input id="login-password" type="password" autocomplete="current-password"></div></div>
 <button class="btn btn-primary" onclick="loginAccount()">로그인</button></div>
@@ -551,7 +551,49 @@
 <div class="form-group"><label for="reg-password">비밀번호 (8자 이상)</label><input id="reg-password" type="password" autocomplete="new-password"></div></div>
 <div class="form-group"><label for="reg-password2">비밀번호 확인</label><input id="reg-password2" type="password" autocomplete="new-password"></div>
 <button class="btn btn-primary" onclick="registerAccount()">회원가입</button></div>
-<div id="account-message" class="message" role="status" aria-live="polite"></div>
+<div id="account-message" class="message" role="status" aria-live="polite"></div> -->
+<!-- Auth Gate 내 메인 카드 -->
+<div class="card" id="auth-card">
+  <!-- 탭 헤더 -->
+  <div class="auth-tabs">
+    <button type="button" class="tab-btn active" onclick="switchAuthMode('login')">로그인</button>
+    <button type="button" class="tab-btn" onclick="switchAuthMode('register')">회원가입</button>
+  </div>
+
+  <!-- 로그인 폼 -->
+  <div id="login-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="login-username">아이디</label>
+        <input id="login-username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="login-password">비밀번호</label>
+        <input id="login-password" type="password" autocomplete="current-password">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="loginAccount()">로그인</button>
+  </div>
+
+  <!-- 회원가입 폼 (기본 숨김) -->
+  <div id="register-form" class="hidden">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="reg-username">아이디 (영문/숫자/._- 3~32자)</label>
+        <input id="reg-username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="reg-password">비밀번호 (8자 이상)</label>
+        <input id="reg-password" type="password" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="reg-password2">비밀번호 확인</label>
+      <input id="reg-password2" type="password" autocomplete="new-password">
+    </div>
+    <button class="btn btn-primary" onclick="registerAccount()">회원가입</button>
+  </div>
+</div>
 </main>
 </div>
 <div id="app-shell" class="hidden">
@@ -667,4 +709,14 @@ request('/health').then(d=>{$('participant-label').textContent=d.name;$('server-
  try{const me=await request('/accounts/me',{token});state.accountToken=token;state.username=me.username||username;onLoggedIn();}
  catch(e){sessionStorage.removeItem('portal_account_token');sessionStorage.removeItem('portal_username');showAuthGate();}
 })();
+function switchAuthMode(mode) {
+  const isLogin = mode === 'login';
+  $('login-form').classList.toggle('hidden', !isLogin);
+  $('register-form').classList.toggle('hidden', isLogin);
+  
+  // 탭 스타일 전환 (탭 방식을 사용하는 경우)
+  document.querySelectorAll('.auth-tabs .tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
 </script></body></html>
