@@ -536,7 +536,7 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-.hidden{display:none!important}.auth-main{max-width:480px;margin:0 auto;padding-top:60px}:root{--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Consolas,monospace}body{line-height:1.55}main{max-width:1100px;padding-top:28px}.page-sub{font-family:var(--sans);margin-bottom:24px}.help{font-size:14px;color:var(--muted);margin:12px 0 18px;line-height:1.7}.notice{padding:14px 18px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px;margin-bottom:24px}.message{margin-top:16px;white-space:pre-wrap;font-size:14px}.table-scroll{overflow-x:auto}.data-table td{white-space:normal;overflow-wrap:anywhere;font-size:12px;vertical-align:top}.check-pass{color:#047857;font-weight:700}.check-fail{color:#dc2626;font-weight:700}.check-unknown{color:#a16207;font-weight:700}button:disabled{opacity:.45;cursor:not-allowed}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafc;padding:16px;font-size:12px;max-height:520px;overflow:auto;margin-top:16px}details{margin-top:20px}summary{cursor:pointer;color:var(--accent)}#connection{white-space:pre-wrap}.btn:not(.btn-primary){border:1px solid var(--border);background:white}.data-table th{white-space:nowrap}.data-table td:first-child{min-width:160px}.data-table td:last-child{min-width:260px}.btn{margin-top:6px}@media(max-width:700px){header{padding:18px;gap:12px;flex-wrap:wrap}.nav{padding:12px;gap:6px;flex-wrap:wrap}.nav-btn{padding:10px;font-size:12px}.card{padding:20px}.form-row{grid-template-columns:1fr}main{padding:20px 14px}.page-title{font-size:26px}.pipeline{flex-direction:column}.pipeline-arrow{transform:rotate(90deg)}}
+.hidden{display:none!important}.auth-main{max-width:480px;margin:0 auto;padding-top:60px}:root{--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Consolas,monospace}body{line-height:1.55}main{max-width:1100px;padding-top:28px}.page-sub{font-family:var(--sans);margin-bottom:24px}.help{font-size:14px;color:var(--muted);margin:12px 0 18px;line-height:1.7}.notice{padding:14px 18px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px;margin-bottom:24px}.message{margin-top:16px;white-space:pre-wrap;font-size:14px}.table-scroll{overflow-x:auto}.data-table td{white-space:normal;overflow-wrap:anywhere;font-size:12px;vertical-align:top}.check-pass{color:#047857;font-weight:700}.check-fail{color:#dc2626;font-weight:700}.check-warning{color:#a16207;font-weight:700}.check-not_applicable{color:#64748b}.check-unknown{color:#a16207;font-weight:700}button:disabled{opacity:.45;cursor:not-allowed}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafc;padding:16px;font-size:12px;max-height:520px;overflow:auto;margin-top:16px}details{margin-top:20px}summary{cursor:pointer;color:var(--accent)}#connection{white-space:pre-wrap}.btn:not(.btn-primary){border:1px solid var(--border);background:white}.data-table th{white-space:nowrap}.data-table td:first-child{min-width:160px}.data-table td:last-child{min-width:260px}.btn{margin-top:6px}@media(max-width:700px){header{padding:18px;gap:12px;flex-wrap:wrap}.nav{padding:12px;gap:6px;flex-wrap:wrap}.nav-btn{padding:10px;font-size:12px}.card{padding:20px}.form-row{grid-template-columns:1fr}main{padding:20px 14px}.page-title{font-size:26px}.pipeline{flex-direction:column}.pipeline-arrow{transform:rotate(90deg)}}
 </style></head><body>
 <header><div class="logo"><span>OPTIMAL</span>.LOADS / Portal</div><div class="header-right"><span class="participant-label" id="participant-label">연결 중</span><span class="status" id="server-status">LOCAL DEMO</span></div></header>
 <div id="auth-gate">
@@ -552,12 +552,13 @@
 <div class="form-group"><label for="reg-password2">비밀번호 확인</label><input id="reg-password2" type="password" autocomplete="new-password"></div>
 <button class="btn btn-primary" onclick="registerAccount()">회원가입</button></div>
 <div id="account-message" class="message" role="status" aria-live="polite"></div> -->
+<div id="account-message" class="message" role="status" aria-live="polite"></div>
 <!-- Auth Gate 내 메인 카드 -->
 <div class="card" id="auth-card">
   <!-- 탭 헤더 -->
   <div class="auth-tabs">
-    <button type="button" class="tab-btn active" onclick="switchAuthMode('login')">로그인</button>
-    <button type="button" class="tab-btn" onclick="switchAuthMode('register')">회원가입</button>
+    <button type="button" class="tab-btn active" data-mode="login" onclick="switchAuthMode('login')">로그인</button>
+    <button type="button" class="tab-btn" data-mode="register" onclick="switchAuthMode('register')">회원가입</button>
   </div>
 
   <!-- 로그인 폼 -->
@@ -655,10 +656,14 @@ async function request(path,{method='GET',body,token,local=false}={}){
 function showPage(name){document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id==='page-'+name));document.querySelectorAll('.nav-btn').forEach(e=>e.classList.toggle('active',e.dataset.page===name));if(name==='assets')loadServices();if(name==='catalog')$('catalog-connection').textContent=state.session?state.session.summary.name:'Credentials 화면에서 먼저 연결해주세요';if(name==='vc'&&state.accountToken)loadMyCredentials();}
 function resetSession(){state.session=null;state.offerings=[];$('connection').textContent='아직 연결된 참여자가 없습니다.';$('service-select').innerHTML='<option value="">카탈로그에서 먼저 서비스를 조회하세요</option>';$('catalog-list').replaceChildren();}
 function renderReport(record){state.record=record;const r=record.report;$('report-card').classList.remove('hidden');
- $('report-summary').innerHTML='<p class="help"><strong>'+escapeHTML(r.summary.name||'조직 정보 없음')+'</strong> · '+escapeHTML(r.summary.country||'-')+' · '+r.documents.length+'개 고유 문서</p><div class="notice">'+(r.eligible_for_demo?'핵심 검사 통과 · 제한된 데모 연결 가능':'연결 보류 · 실패 또는 서명 확인 불가 항목을 확인하세요')+'</div>';
- const labels={pass:'통과',fail:'실패',unknown:'확인 불가'};
- $('report-checks').innerHTML='<table class="data-table"><thead><tr><th>대상</th><th>검사</th><th>결과</th><th>설명</th></tr></thead><tbody>'+r.checks.map(c=>'<tr><td>'+escapeHTML(c.scope)+'</td><td>'+escapeHTML(c.name)+'</td><td><span class="check-'+c.status+'">'+labels[c.status]+'</span></td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table>';
- $('document-json').textContent=JSON.stringify(r.documents,null,2);
+ const labels={pass:'통과',fail:'실패',unknown:'확인 불가',warning:'주의',not_applicable:'해당 없음'};
+ const counts=Object.entries(r.counts||{}).map(([k,v])=>escapeHTML(labels[k]||k)+' '+v).join(' · ');
+ $('report-summary').innerHTML='<p class="help"><strong>'+escapeHTML(r.summary.name||'조직 정보 없음')+'</strong> · '+escapeHTML(r.summary.country||'-')+' · '+r.documents.length+'개 고유 문서</p><div class="notice">'+(r.eligible_for_demo?'데모 필수 검사 통과 · 공식 Gaia-X 인증 완료를 의미하지 않습니다':'연결 보류 · 필수 검사 실패 또는 확인 불가')+'</div><p class="help">'+counts+'<br>검증 시각: '+escapeHTML(r.verified_at||'-')+'<br>유효 한계: '+escapeHTML(r.valid_until||'-')+'</p><label for="check-filter">검사 표시 </label><select id="check-filter" onchange="renderChecks()"><option value="all">전체</option><option value="attention">실패·확인 불가·주의</option><option value="required">데모 필수 검사</option></select>';
+ renderChecks();$('document-json').textContent=JSON.stringify(r.documents,null,2);
+}
+function renderChecks(){const labels={pass:'통과',fail:'실패',unknown:'확인 불가',warning:'주의',not_applicable:'해당 없음'};const mode=$('check-filter').value;
+ const checks=state.record.report.checks.filter(c=>mode==='required'?c.required_for_demo:mode==='attention'?['fail','unknown','warning'].includes(c.status):true);
+ $('report-checks').innerHTML='<table class="data-table"><thead><tr><th>대상</th><th>검사</th><th>정책</th><th>결과</th><th>설명</th></tr></thead><tbody>'+checks.map(c=>'<tr><td>'+escapeHTML(c.scope)+'</td><td>'+escapeHTML(c.name)+'</td><td>'+(c.required_for_demo?'필수':'추가 확인')+'</td><td><span class="check-'+(Object.prototype.hasOwnProperty.call(labels,c.status)?c.status:'unknown')+'">'+escapeHTML(labels[c.status]||'확인 불가')+'</span></td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table>';
 }
 async function importFiles(){if(!state.accountToken)return message('import-message','먼저 로그인해주세요',true);
  const files=Array.from($('credential-files').files);if(!files.length)return message('import-message','파일을 선택해주세요',true);if(files.reduce((n,f)=>n+f.size,0)>8000000)return message('import-message','전체 8 MB 이하로 선택해주세요',true);
@@ -669,7 +674,7 @@ async function loadMyCredentials(){if(!state.accountToken)return;
  try{const data=await request('/accounts/me/credentials',{token:state.accountToken});renderMyCredentials(data.credentials);}catch(e){message('import-message',e.message,true);}}
 function renderMyCredentials(list){state.myCredentials=list;
  $('my-credentials-list').innerHTML=list.length?list.map(c=>
-  '<div class="offer-card"><div><strong>'+escapeHTML(c.summary.name||'이름 없음')+'</strong><p class="help">'+escapeHTML(c.summary.country||'-')+' · '+(c.eligible_for_demo?'통과':'실패 / 확인 불가')+' · '+new Date(c.created*1000).toLocaleString()+'</p></div>'+
+  '<div class="offer-card"><div><strong>'+escapeHTML(c.summary.name||'이름 없음')+'</strong><p class="help">'+escapeHTML(c.summary.country||'-')+' · '+(c.needs_recheck?'새 검증 정책으로 재검증 필요':c.eligible_for_demo?'데모 검사 통과':'실패 / 확인 불가')+' · '+new Date(c.created*1000).toLocaleString()+'</p></div>'+
   '<div class="btn-row"><button class="btn" onclick="recheckOne(\''+c.id+'\')">다시 검증</button><button class="btn btn-primary"'+(c.eligible_for_demo?'':' disabled')+' onclick="activateOne(\''+c.id+'\')">데모 참여자로 연결</button></div></div>'
  ).join(''):'<p class="help">아직 연결된 자격증명이 없습니다. 위에서 파일을 가져와주세요.</p>';}
 async function recheckOne(id){message('import-message','공개키와 자격증명을 다시 확인하는 중입니다…');

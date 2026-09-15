@@ -1,0 +1,16 @@
+{
+  "profile": "loire-demo-v2",
+  "notice": "Portal-authored subset; not official Gaia-X SHACL",
+  "retrieved_at": "2026-09-15",
+  "context_sources": {
+    "gaia": "https://registry.lab.gaia-x.eu/development/context/development",
+    "w3c": "https://www.w3.org/ns/credentials/v2",
+    "examples": "https://www.w3.org/ns/credentials/examples/v2"
+  },
+  "sha256": {
+    "loire-demo-v2.ttl": "3a7cfea44078c0331f18064306fa7ccbdf18ea83e915e7978e5f0957b91e3153",
+    "contexts/w3c.json": "59955ced6697d61e03f2b2556febe5308ab16842846f5b586d7f1f7adec92734",
+    "contexts/gaia.json": "506fad9bb2c7d639e3ff04f62993bb80d63c00210f02882f667619d76f5a251d",
+    "contexts/examples.json": "57393fbc69d6efb9b9b5dc9cb6b9880b0944360abfe2eaf459c9e58cf2279d7c"
+  }
+}

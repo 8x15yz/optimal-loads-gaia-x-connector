@@ -18,14 +18,16 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from accounts import hash_password, valid_password, valid_username, verify_password
-from credentials import MAX_TOTAL, inspect_set, read_uploads
+from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='Credential Portal · Local Demo', version='0.2.0')
+app = FastAPI(title='Credential Portal · Local Demo', version='0.3.0')
 app.state.port = 8000
 app.state.name = 'BLUEMAP Demo'
 app.state.db = ROOT / 'data' / 'portal-8000.sqlite3'
-app.state.resolver = None  # injection point for deterministic offline tests
+app.state.resolver = None  # injection points for deterministic offline tests
+app.state.resource_fetcher = None
+app.state.verification_policy = None
 # 외부 노출용으로 허용된 호스트/오리진. 인증이 없는 상태로 공개되므로 이 목록은
 # 실제로 접근을 허용해야 하는 대상으로만 유지할 것.
 PUBLIC_HOSTS = {'35.212.206.187'}
@@ -89,7 +91,11 @@ def local_header(value):
 
 def inspect(tokens):
     try:
-        return inspect_set(tokens, resolver=app.state.resolver) if app.state.resolver else inspect_set(tokens)
+        options = {}
+        if app.state.resolver: options['resolver'] = app.state.resolver
+        if app.state.resource_fetcher: options['resource_fetcher'] = app.state.resource_fetcher
+        if app.state.verification_policy: options['policy'] = app.state.verification_policy
+        return inspect_set(tokens, **options)
     except Exception as e:
         raise HTTPException(400, '자격증명 입력 오류: ' + str(e)[:250])
 
@@ -185,7 +191,8 @@ def my_credentials(authorization: str = Header('')):
     for r in rows:
         report = json.loads(r['report'])
         out.append({'id': r['id'], 'created': r['created'], 'summary': report['summary'],
-                    'eligible_for_demo': report['eligible_for_demo']})
+                    'eligible_for_demo': report['eligible_for_demo'] and report.get('profile')==PROFILE,
+                    'needs_recheck': report.get('profile')!=PROFILE})
     return {'credentials': out}
 
 def authorize(authorization, fresh=False):
@@ -197,13 +204,22 @@ def authorize(authorization, fresh=False):
     if not row or row['expires'] <= time.time():
         raise HTTPException(401, '세션이 없거나 만료되었습니다. 데모 참여자를 다시 연결해주세요')
     imported = get_import(row['import_id'])
-    report = inspect(json.loads(imported['tokens'])) if fresh else json.loads(imported['report'])
+    report = json.loads(imported['report'])
+    try:
+        age = time.time() - date_value(report.get('verified_at')).timestamp()
+    except (ValueError, TypeError):
+        age = float('inf')
+    if fresh or report.get('profile')!=PROFILE or report.get('has_credential_status') or age<0 or age>=60:
+        report = inspect(json.loads(imported['tokens']))
+        with db() as c:
+            c.execute('UPDATE imports SET report=? WHERE id=?',(json.dumps(report),imported['id']))
     if not report['eligible_for_demo']:
         raise HTTPException(403, '현재 자격증명 검증에 실패했거나 확인 불가입니다. 가져오기 화면에서 재검증해주세요')
     # Even a catalog call must not accept credentials after their VC dates expire.
-    from credentials import date_value
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
+    if not report.get('valid_until') or now >= date_value(report['valid_until']):
+        raise HTTPException(403, '자격증명·인증서·상태 목록의 유효기간이 지났습니다')
     for d in report['documents']:
         if not date_value(d['payload']['validFrom']) <= now < date_value(d['payload']['validUntil']):
             raise HTTPException(403, '자격증명 유효기간이 지났습니다')
@@ -215,7 +231,7 @@ def ui():
 
 @app.get('/health')
 def health():
-    return {'status': 'ok', 'name': app.state.name, 'port': app.state.port, 'mode': 'non-production demo'}
+    return {'status': 'ok', 'name': app.state.name, 'port': app.state.port, 'mode': 'non-production demo', 'profile': PROFILE}
 
 @app.get('/participant')
 def participant():
@@ -273,7 +289,7 @@ def activate(req: Recheck, x_portal_local: str = Header(''), authorization: str 
     subject = report['summary']['subject_id']
     # This is explicitly a local demo mapping, not proof of the uploader's legal identity.
     pid = 'demo:' + hashlib.sha256(subject.encode()).hexdigest()[:24]
-    expires = time.time() + 3600
+    expires = min(time.time() + 3600, date_value(report['valid_until']).timestamp())
     with db() as c:
         c.execute('INSERT INTO sessions VALUES (?,?,?,?,?)',
                   (hashlib.sha256(token.encode()).hexdigest(), req.import_id, pid, expires, acc['account_id']))
