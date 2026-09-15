@@ -17,6 +17,19 @@ jobs:
           script: |
             cd ~/optimal-loads-gaia-x-connector/portal-mvp
             git pull origin main
-            source venv/bin/activate
-            pip install -r requirements.txt
+            
+            # 가상환경 폴더가 .venv 인지 venv 인지 확인 후 맞춰서 실행
+            if [ -d ".venv" ]; then
+              source .venv/bin/activate
+            elif [ -d "venv" ]; then
+              source venv/bin/activate
+            fi
+
+            # requirements-lock.txt 파일이 있으면 우선 설치
+            if [ -f "requirements-lock.txt" ]; then
+              pip install -r requirements-lock.txt
+            else
+              pip install -r requirements.txt
+            fi
+
             sudo systemctl restart portal
