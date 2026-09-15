@@ -1,4 +1,4 @@
-# Gaia-X Portal · Loire demo v2
+# Gaia-X Portal · Loire demo v2 
 
 첨부 프로젝트의 VC 검증을 보완한 PoC입니다. 외부에서 발급받은 VC/VP를 가져오며, 이 포털이 VC를 발급하지는 않습니다. 기존 회원가입, 로그인, 자격증명 가져오기, 데모 참여자 연결, 국가 정책에 따른 서비스 요청 흐름을 유지합니다.
 
