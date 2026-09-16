@@ -272,7 +272,8 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
             if not isinstance(ref, dict):
                 hash_ok = False; continue
             target = next((d for d in docs if d['payload'].get('id') == ref.get('id') and d['kind'] != 'gx:LabelCredential'), None)
-            if not target or ref.get('id') in ref_ids or ref.get('type') != target['kind']:
+            ref_type = ref.get('gx:credentialType') or ref.get('type')
+            if not target or ref.get('id') in ref_ids or ref_type != target['kind']:
                 hash_ok = False; continue
             ref_ids.add(ref['id'])
             digest = 'sha256-' + hashlib.sha256(rfc8785.dumps(target['payload'])).hexdigest()
