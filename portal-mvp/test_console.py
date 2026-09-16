@@ -124,7 +124,7 @@ class ConsoleTests(unittest.TestCase):
         def fake_client(**kwargs):
             return original(transport=p.httpx.MockTransport(upstream),**kwargs)
         with p.db() as c:c.execute('UPDATE services SET data_url=? WHERE id=?',('https://weather.example/api',self.service))
-        with patch.dict(os.environ,{'PORTAL_ALLOWED_DATA_ORIGINS':'https://weather.example'}), patch.object(p.httpx,'Client',side_effect=fake_client):
+        with patch.dict(os.environ,{'PORTAL_ALLOWED_DATA_ORIGINS':'https://weather.example','PORTAL_ALLOWED_DATA_PATHS':'https://weather.example/api/griddata'}), patch.object(p.httpx,'Client',side_effect=fake_client):
             r=self.client.get(url+'/griddata?source=gfs&x=1&x=2',headers=self.users[0])
         self.assertEqual(r.status_code,200);self.assertEqual(r.json(),{'grid':[1,2]})
         self.assertEqual(str(seen[0].url),'https://weather.example/api/griddata?source=gfs&x=1&x=2')
@@ -250,5 +250,125 @@ class ConsoleTests(unittest.TestCase):
             self.assertEqual([(o['origin'],o['source'],o['deletable']) for o in listed],[('https://weather.example','server',False)])
             self.assertEqual(self.client.post('/admin/data-origins/delete',headers=self.admin,json={'origin':'https://weather.example'}).status_code,400)
             self.assertEqual(self.client.post('/admin/data-origins',headers=self.admin,json={'origin':'https://weather.example'}).status_code,409)
+
+    # ---- 데이터 API 경로 허용 목록 ----
+    def external_service(self,base='https://grid.example/api'):
+        """carol이 외부 API 서비스를 제공하고 alice가 계약한 상태를 만든다."""
+        A=self.admin
+        self.assertEqual(self.client.post('/admin/data-origins',headers=A,json={'origin':'https://grid.example'}).status_code,200)
+        self.act('connect',2,import_id='vc2')
+        r=self.client.post('/service-offerings',headers=self.users[2],json={'name':'Grid','data_url':base})
+        self.assertEqual(r.status_code,200,r.text);sid=r.json()['service_offering_id']
+        self.connect(0);self.assertEqual(self.act('contract',0,service_id=sid).status_code,200)
+        return sid,self.state(0)['access_path']+'/'+sid
+    def mock_upstream(self,handler):
+        original=p.httpx.Client
+        seen=[]
+        def wrapped(request):
+            seen.append(request);return handler(request)
+        return patch.object(p.httpx,'Client',side_effect=lambda **kw: original(transport=p.httpx.MockTransport(wrapped),**kw)),seen
+    def add_path(self,path,origin='https://grid.example',user=None):
+        return self.client.post('/admin/data-paths',headers=user or self.admin,json={'origin':origin,'path':path})
+
+    def test_normalize_path_rules(self):
+        self.assertEqual(p.normalize_path('/api/s100/forecast-tiles/'),'/api/s100/forecast-tiles')
+        for bad in ('api/griddata','/api//griddata','/api/../admin','/api/./x','/api/grid%2Ffile','/api/grid?x=1','/api/grid#x','/api/그리드','/'+'a'*400):
+            with self.assertRaises(ValueError,msg=bad):p.normalize_path(bad)
+
+    def test_operator_manages_paths_and_access_follows_immediately(self):
+        sid,url=self.external_service()
+        self.assertEqual(self.add_path('/api/gridfile',user=self.users[2]).status_code,403)
+        self.assertEqual(self.add_path('/api/x',origin='https://not-allowed.example').status_code,400)
+        self.assertEqual(self.add_path('/api/../x').status_code,400)
+        for path in ('/api/griddata','/api/gridfile','/api/s100/forecast-tiles/'):
+            self.assertEqual(self.add_path(path).status_code,200,path)
+        self.assertEqual(self.add_path('/api/gridfile').status_code,409)
+        listed=next(o for o in self.client.get('/admin/data-origins',headers=self.admin).json()['origins'] if o['origin']=='https://grid.example')
+        self.assertEqual([x['path'] for x in listed['paths']],['/api/griddata','/api/gridfile','/api/s100/forecast-tiles'])
+        self.assertEqual(listed['services'],1)
+        # 이용자 카탈로그에는 base URL 하위 상대 경로만 노출, 원본 주소는 비노출
+        svc=next(s for s in self.state(0)['services'] if s['id']==sid)
+        self.assertEqual(svc['paths'],['griddata','gridfile','s100/forecast-tiles']);self.assertNotIn('data_url',svc)
+        ctx,seen=self.mock_upstream(lambda req:p.httpx.Response(200,json={'ok':True}))
+        with ctx:
+            self.assertEqual(self.client.get(url+'/s100/forecast-tiles?product=s111&nw_lon=118.96').status_code,200)
+            self.assertEqual(self.client.get(url+'/gridfile?source=noaa').status_code,200)
+            self.assertEqual(self.client.get(url+'/latest').status_code,404)          # 미등록
+            self.assertEqual(self.client.get(url+'/api/griddata').status_code,404)    # base 중복
+            self.assertEqual(self.client.get(url+'/s100/%2E%2E/gridfile').status_code,404)  # 클라이언트 정규화를 피한 .. 세그먼트
+            self.assertEqual(self.client.get(url+'/ping').status_code,200)            # ping은 목록과 무관
+        self.assertEqual([str(r.url) for r in seen],['https://grid.example/api/s100/forecast-tiles?product=s111&nw_lon=118.96',
+                                                     'https://grid.example/api/gridfile?source=noaa'])
+        # 경로 해제는 해당 경로만 즉시 차단
+        self.assertEqual(self.client.post('/admin/data-paths/delete',headers=self.admin,json={'origin':'https://grid.example','path':'/api/gridfile'}).status_code,200)
+        with ctx:
+            self.assertEqual(self.client.get(url+'/gridfile').status_code,404)
+            self.assertEqual(self.client.get(url+'/griddata').status_code,200)
+        # origin 해제 시 경로도 함께 정리
+        self.client.post('/admin/data-origins/delete',headers=self.admin,json={'origin':'https://grid.example'})
+        with p.db() as c:self.assertFalse(c.execute("SELECT 1 FROM data_origin_paths WHERE origin='https://grid.example'").fetchone())
+        logs=self.client.get('/console/logs?all_accounts=true',headers=self.admin).json()['logs']
+        self.assertTrue(any('경로 허용 해제' in l['summary'] for l in logs))
+        denied=next(l for l in logs if l['details'].get('upstream_path')=='/api/latest')
+        self.assertEqual(denied['result'],'fail')
+
+    def test_unregistered_path_does_not_leak_before_contract(self):
+        sid,url=self.external_service()
+        self.act('revoke-contract',service_id=sid)
+        self.assertEqual(self.client.get(url+'/gridfile').status_code,403)
+
+    def test_upstream_errors_are_distinguished(self):
+        sid,url=self.external_service();self.add_path('/api/griddata')
+        cases=[(lambda r:p.httpx.Response(400,json={'detail':'lat is required'}),502,'HTTP 400'),
+               (lambda r:p.httpx.Response(302,headers={'location':'https://evil.example'}),502,'리다이렉트'),
+               (lambda r:p.httpx.Response(200,content=b'x'*(p.UPSTREAM_MAX_BYTES+1)),502,'크기 제한'),
+               (lambda r:(_ for _ in ()).throw(p.httpx.ReadTimeout('slow')),504,'시간 초과'),
+               (lambda r:(_ for _ in ()).throw(p.httpx.ConnectError('down')),502,'연결 실패')]
+        for handler,status,text in cases:
+            ctx,_=self.mock_upstream(handler)
+            with ctx:r=self.client.get(url+'/griddata')
+            self.assertEqual(r.status_code,status,text);self.assertIn(text,r.json()['detail'])
+        self.assertTrue(any('lat is required' in l['summary'] for l in self.client.get('/console/logs',headers=self.users[0]).json()['logs']))
+
+    def test_presigned_issuance_logs_object_keys_without_signature(self):
+        sid,url=self.external_service();self.add_path('/api/s100/forecast-tiles');self.add_path('/api/latest')
+        sig='https://bucket.s3.amazonaws.com/{k}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=deadbeef'
+        tiles={'expires_in_seconds':3600,'tiles':[{'s3_key':'s111/a_051.h5','presigned_url':sig.format(k='s111/a_051.h5')},
+                                                  {'s3_key':'s111/a_052.h5','presigned_url':sig.format(k='s111/a_052.h5')}]}
+        manifest={'issued':{'expires_in_seconds':900},'files':[{'url':sig.format(k='noaa/x.grib2')}]}
+        for path,payload,keys,exp in (('s100/forecast-tiles',tiles,['s111/a_051.h5','s111/a_052.h5'],3600),('latest',manifest,['noaa/x.grib2'],900)):
+            ctx,_=self.mock_upstream(lambda req,payload=payload:p.httpx.Response(200,json=payload))
+            with ctx:self.assertEqual(self.client.get(url+'/'+path).status_code,200)
+            log=self.client.get('/console/logs',headers=self.users[0]).json()['logs'][0]
+            self.assertEqual(log['details']['issued_object_keys'],keys);self.assertEqual(log['details']['presigned_expires_in_seconds'],exp)
+            self.assertEqual(log['details']['upstream_path'],'/api/'+path)
+            self.assertNotIn('deadbeef',json.dumps(log))
+
+    def test_server_env_paths_listed_effective_and_not_removable(self):
+        env={'PORTAL_ALLOWED_DATA_ORIGINS':'https://grid.example','PORTAL_ALLOWED_DATA_PATHS':'https://grid.example/api/latest, https://grid.example/api/x?q=1, bad'}
+        with patch.dict(os.environ,env):
+            self.act('connect',2,import_id='vc2')
+            sid=self.client.post('/service-offerings',headers=self.users[2],json={'name':'Grid','data_url':'https://grid.example/api/'}).json()['service_offering_id']
+            listed=self.client.get('/admin/data-origins',headers=self.admin).json()['origins'][0]
+            self.assertEqual([(x['path'],x['source'],x['deletable']) for x in listed['paths']],[('/api/latest','server',False)])
+            self.assertEqual(self.add_path('/api/latest').status_code,409)
+            self.assertEqual(self.client.post('/admin/data-paths/delete',headers=self.admin,json={'origin':'https://grid.example','path':'/api/latest'}).status_code,400)
+            self.assertEqual(next(s for s in self.state(2)['services'] if s['id']==sid)['paths'],['latest'])
+
+    def test_first_migration_seeds_legacy_paths_for_existing_services(self):
+        import sqlite3
+        path=Path(self.tmp.name)/'legacy.sqlite3'
+        conn=sqlite3.connect(path)
+        conn.executescript("""CREATE TABLE services(id TEXT PRIMARY KEY, name TEXT, data_url TEXT, country TEXT);
+            CREATE TABLE data_origins(origin TEXT PRIMARY KEY, note TEXT, created REAL, created_by TEXT);""")
+        conn.execute("INSERT INTO services VALUES ('s1','W','https://weather-api.bmap.kr/api/','KR')")
+        conn.execute("INSERT INTO services VALUES ('s2','D','demo://weather','KR')")
+        conn.execute("INSERT INTO data_origins VALUES ('https://weather-api.bmap.kr','',0,NULL)");conn.commit();conn.close()
+        old=p.app.state.db;p.app.state.db=path
+        try:
+            self.assertEqual(p.allowed_data_paths('https://weather-api.bmap.kr'),{'/api/griddata','/api/latest'})
+            with p.db() as c:c.execute("DELETE FROM data_origin_paths")
+            self.assertEqual(p.allowed_data_paths('https://weather-api.bmap.kr'),set())  # 재실행 시 다시 채우지 않음
+        finally:p.app.state.db=old
 
 if __name__=='__main__':unittest.main(verbosity=2)

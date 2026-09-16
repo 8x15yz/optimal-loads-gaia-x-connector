@@ -4,6 +4,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -23,7 +24,7 @@ from accounts import hash_password, valid_password, valid_username, verify_passw
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='BLUEMAP · Management Console PoC', version='0.5.0')
+app = FastAPI(title='BLUEMAP · Management Console PoC', version='0.6.0')
 app.state.port = 8000
 app.state.name = 'BLUEMAP Demo'
 app.state.db = ROOT / 'data' / 'portal-8000.sqlite3'
@@ -67,6 +68,7 @@ def db():
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    had_paths_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='data_origin_paths'").fetchone()
     conn.executescript('''
     CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, created REAL);
     CREATE TABLE IF NOT EXISTS account_sessions(token_hash TEXT PRIMARY KEY, account_id TEXT, expires REAL);
@@ -77,6 +79,8 @@ def db():
     CREATE TABLE IF NOT EXISTS activity(id TEXT PRIMARY KEY, created REAL, actor_id TEXT, account_id TEXT, action TEXT, result TEXT, summary TEXT, duration_ms INTEGER, details TEXT);
     CREATE TABLE IF NOT EXISTS contracts(id TEXT PRIMARY KEY, participant_id TEXT, service_id TEXT, country TEXT, expires REAL);
     CREATE TABLE IF NOT EXISTS data_origins(origin TEXT PRIMARY KEY, note TEXT, created REAL, created_by TEXT);
+    CREATE TABLE IF NOT EXISTS data_origin_paths(origin TEXT NOT NULL, path TEXT NOT NULL, note TEXT, created REAL, created_by TEXT,
+                                                 PRIMARY KEY(origin, path));
     ''')
     # Migration for DB files created before accounts existed.
     for stmt in ('ALTER TABLE imports ADD COLUMN account_id TEXT',
@@ -96,6 +100,8 @@ def db():
             conn.execute(stmt)
         except sqlite3.OperationalError:
             pass
+    if not had_paths_table:
+        seed_legacy_paths(conn)
     try:
         yield conn
         conn.commit()
@@ -409,6 +415,82 @@ def validate_data_url(url):
     if origin not in allowed_data_origins():
         raise HTTPException(400, f'{origin} 은(는) 데이터 API 허용 목록에 없습니다. 운영자에게 origin 허용을 요청하세요')
 
+# ---- 데이터 API 경로 허용 목록 ----
+# origin 하위에 origin 기준 전체 경로(/api/griddata)를 정확 일치로 등록. 와일드카드·접두사 매칭 없음.
+# 서버 환경변수(PORTAL_ALLOWED_DATA_PATHS, 전체 URL 콤마 구분) + 운영자 콘솔 등록분의 합집합.
+# 경로는 해당 origin이 허용된 동안에만 유효하며, ping은 upstream을 호출하지 않는 포털 내부 기능이라 목록과 무관.
+DEMO_PATHS = {'griddata', 'latest'}  # demo://weather 고정 샘플이 응답하는 경로
+LEGACY_PATHS = ('griddata', 'latest')  # 0.5 이전 코드 상수 allowlist, 최초 마이그레이션 시 자동 이전
+PATH_SEGMENT = re.compile(r'^[A-Za-z0-9._~-]+$')
+MAX_PATH_LEN = 300
+
+def normalize_path(path):
+    """origin 기준 전체 경로 정규화. 형식 오류 시 ValueError.
+
+    '/'로 시작, 세그먼트는 영문·숫자·._~- 만 허용, 빈 세그먼트('//')·'.'·'..'·퍼센트 인코딩·쿼리·프래그먼트 거부.
+    끝 슬래시는 제거해 같은 경로로 취급.
+    """
+    path = (path or '').strip()
+    if not path.startswith('/') or len(path) > MAX_PATH_LEN:
+        raise ValueError(f'경로는 /로 시작하고 {MAX_PATH_LEN}자 이하여야 합니다 (예: /api/griddata)')
+    if path != '/' and path.endswith('/'):
+        path = path[:-1]
+    segments = path[1:].split('/')
+    for seg in segments:
+        if seg in ('', '.', '..') or not PATH_SEGMENT.match(seg):
+            raise ValueError('경로에는 영문·숫자·. _ ~ - 와 단일 / 만 사용할 수 있습니다 (쿼리·인코딩·.. 불가)')
+    return path
+
+def base_path_of(data_url):
+    """서비스 base URL의 경로 부분(끝 슬래시 제거). 루트면 ''."""
+    return urlsplit(data_url).path.rstrip('/')
+
+def env_data_paths():
+    """PORTAL_ALLOWED_DATA_PATHS=https://host/api/griddata,... → {(origin, path)}. 잘못된 항목은 무시."""
+    out = set()
+    for v in os.getenv('PORTAL_ALLOWED_DATA_PATHS', '').split(','):
+        v = v.strip()
+        if not v:
+            continue
+        try:
+            parsed = urlsplit(v)
+            if parsed.query or parsed.fragment:
+                continue
+            out.add((origin_of(v), normalize_path(parsed.path)))
+        except ValueError:
+            pass
+    return out
+
+def allowed_data_paths(origin):
+    if origin not in allowed_data_origins():
+        return set()
+    with db() as c:
+        rows = {r['path'] for r in c.execute('SELECT path FROM data_origin_paths WHERE origin=?', (origin,))}
+    return rows | {pth for o, pth in env_data_paths() if o == origin}
+
+def service_paths(data_url):
+    """이용자에게 보여줄 서비스 상대 경로 목록(base URL 하위만)."""
+    if data_url == 'demo://weather':
+        return sorted(DEMO_PATHS)
+    try:
+        origin = origin_of(data_url)
+    except ValueError:
+        return []
+    prefix = base_path_of(data_url) + '/'
+    return sorted(pth[len(prefix):] for pth in allowed_data_paths(origin) if pth.startswith(prefix) and len(pth) > len(prefix))
+
+def seed_legacy_paths(conn):
+    """경로 테이블이 처음 생길 때 기존 외부 API 서비스의 griddata/latest를 자동 등록해 운영 중 서비스가 끊기지 않게 함."""
+    for r in conn.execute("SELECT DISTINCT data_url FROM services WHERE data_url IS NOT NULL AND data_url!='demo://weather'").fetchall():
+        try:
+            origin, base = origin_of(r['data_url']), base_path_of(r['data_url'])
+            paths = [normalize_path(base + '/' + x) for x in LEGACY_PATHS]
+        except ValueError:
+            continue
+        for pth in paths:
+            conn.execute('INSERT OR IGNORE INTO data_origin_paths VALUES (?,?,?,?,?)',
+                         (origin, pth, '0.5 이전 기본 허용 경로 자동 이전', time.time(), None))
+
 def participant_id_for(subject):
     # 로컬 데모 매핑. 업로더의 법적 대표 권한을 증명하지 않음.
     return 'demo:' + hashlib.sha256(subject.encode()).hexdigest()[:24]
@@ -457,7 +539,8 @@ def public_service(row, viewer_account_id, operator=False):
            'provider_name': row['provider_name'] or app.state.name,
            'provider_participant_id': row['provider_participant_id'],
            'platform_sample': not row['owner_account_id'], 'sample': row['data_url'] == 'demo://weather',
-           'mine': mine, 'active': ok, 'status_reason': reason, 'created': row['created']}
+           'mine': mine, 'active': ok, 'status_reason': reason, 'created': row['created'],
+           'paths': service_paths(row['data_url'])}
     # 다른 참여자의 원본 API 주소는 제공자 본인과 운영자에게만 노출
     if mine or operator:
         out['data_url'] = row['data_url']
@@ -819,7 +902,63 @@ def list_data_origins(authorization: str = Header('')):
     known = {r['origin'] for r in rows}
     items += [{'origin': o, 'note': '서버 환경변수 PORTAL_ALLOWED_DATA_ORIGINS', 'created': None, 'created_by': None,
                'source': 'server', 'deletable': False, 'services': usage.get(o, 0)} for o in sorted(env - known)]
+    env_paths = env_data_paths()
+    with db() as c:
+        path_rows = [dict(r) for r in c.execute('SELECT p.origin, p.path, p.note, p.created, a.username AS created_by '
+                                                'FROM data_origin_paths p LEFT JOIN accounts a ON a.id=p.created_by ORDER BY p.path')]
+    for item in items:
+        o = item['origin']
+        console_paths = [r for r in path_rows if r['origin'] == o]
+        known_paths = {r['path'] for r in console_paths}
+        item['paths'] = [{**{k: r[k] for k in ('path', 'note', 'created', 'created_by')}, 'source': 'console', 'deletable': True}
+                         for r in console_paths]
+        item['paths'] += [{'path': pth, 'note': '서버 환경변수 PORTAL_ALLOWED_DATA_PATHS', 'created': None, 'created_by': None,
+                           'source': 'server', 'deletable': False}
+                          for oo, pth in sorted(env_paths) if oo == o and pth not in known_paths]
+        item['paths'].sort(key=lambda x: x['path'])
     return {'origins': items}
+
+class PathRequest(BaseModel):
+    origin: str = Field(min_length=1, max_length=300)
+    path: str = Field(min_length=1, max_length=MAX_PATH_LEN + 10)
+    note: str = Field(default='', max_length=200)
+
+def parse_path_request(req):
+    try:
+        origin = origin_of(req.origin, origin_only=True)
+        path = normalize_path(req.path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return origin, path
+
+@app.post('/admin/data-paths')
+def add_data_path(req: PathRequest, authorization: str = Header('')):
+    me = require_admin(authorization)['account_id']
+    origin, path = parse_path_request(req)
+    if origin not in allowed_data_origins():
+        raise HTTPException(400, '먼저 origin을 허용 목록에 추가하세요')
+    if (origin, path) in env_data_paths():
+        raise HTTPException(409, '이미 서버 설정으로 허용된 경로입니다')
+    try:
+        with db() as c:
+            c.execute('INSERT INTO data_origin_paths VALUES (?,?,?,?,?)', (origin, path, req.note.strip(), time.time(), me))
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, '이미 허용된 경로입니다')
+    audit_context(summary=f'데이터 API 경로 허용: {origin}{path}')
+    return {'origin': origin, 'path': path}
+
+@app.post('/admin/data-paths/delete')
+def delete_data_path(req: PathRequest, authorization: str = Header('')):
+    require_admin(authorization)
+    origin, path = parse_path_request(req)
+    with db() as c:
+        deleted = c.execute('DELETE FROM data_origin_paths WHERE origin=? AND path=?', (origin, path)).rowcount
+    if not deleted:
+        if (origin, path) in env_data_paths():
+            raise HTTPException(400, '서버 환경변수로 허용된 경로는 콘솔에서 해제할 수 없습니다')
+        raise HTTPException(404, '허용 목록에 없는 경로입니다')
+    audit_context(summary=f'데이터 API 경로 허용 해제: {origin}{path}')
+    return {'status': 'ok', 'origin': origin, 'path': path}
 
 @app.post('/admin/data-origins')
 def add_data_origin(req: OriginRequest, authorization: str = Header('')):
@@ -848,6 +987,8 @@ def delete_data_origin(req: OriginRequest, authorization: str = Header('')):
         raise HTTPException(400, str(e))
     with db() as c:
         deleted = c.execute('DELETE FROM data_origins WHERE origin=?', (origin,)).rowcount
+        if deleted:
+            c.execute('DELETE FROM data_origin_paths WHERE origin=?', (origin,))
     if not deleted:
         if origin in env_data_origins():
             raise HTTPException(400, '서버 환경변수로 허용된 origin은 콘솔에서 해제할 수 없습니다')
@@ -867,36 +1008,116 @@ def delete_service(service_id: str, authorization: str = Header('')):
     require_admin(authorization)
     return delete_own_service(service_id, authorization)
 
-@app.get('/access/{key}/{service_id}/{path}')
+UPSTREAM_MAX_BYTES = 5_000_000
+UPSTREAM_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+PRESIGNED_MARKERS = ('X-Amz-Signature=', 'X-Goog-Signature=')
+MAX_LOGGED_KEYS = 1000
+
+def issued_object_keys(payload):
+    """응답 JSON에서 발급된 객체 키 수집. presigned URL 자체(서명 포함)는 반환하지 않음.
+
+    s3_key 필드가 있으면 그 값을, 없으면 서명 파라미터가 붙은 URL의 경로를 키로 봄.
+    """
+    keys, expires = [], []
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k == 's3_key' and isinstance(v, str):
+                    keys.append(v)
+                elif k == 'expires_in_seconds' and isinstance(v, (int, float)):
+                    expires.append(v)
+                elif isinstance(v, str) and any(m in v for m in PRESIGNED_MARKERS) and 's3_key' not in node:
+                    keys.append(urlsplit(v).path.lstrip('/'))
+                else:
+                    walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(payload)
+    unique = list(dict.fromkeys(keys))
+    return unique, (min(expires) if expires else None)
+
+def upstream_error_detail(response):
+    try:
+        body = response.read()[:2000]
+    except httpx.HTTPError:
+        return ''
+    try:
+        data = json.loads(body)
+        text = data.get('detail') or data.get('error') or data.get('message') if isinstance(data, dict) else None
+        text = text if isinstance(text, str) else json.dumps(data, ensure_ascii=False)
+    except ValueError:
+        text = body.decode(errors='replace')
+    return ' '.join(text.split())[:200]
+
+@app.get('/access/{key}/{service_id}/{path:path}')
 def fixed_access(key: str, service_id: str, path: str, request: Request):
-    if path not in {'ping','griddata','latest'}: raise HTTPException(404,'허용되지 않은 데이터 경로')
+    try:
+        relative = normalize_path('/' + path)[1:]
+    except ValueError:
+        raise HTTPException(404, '허용되지 않은 데이터 경로')
     with db() as c:
         row=c.execute('SELECT account_id FROM access_keys WHERE key_hash=?',(hashlib.sha256(key.encode()).hexdigest(),)).fetchone()
     if not row: raise HTTPException(403,'접속 키가 없거나 폐기되었습니다')
     audit_context(account_id=row['account_id'])
-    session,report=active_session(row['account_id'],fresh=path=='ping')
+    session,report=active_session(row['account_id'],fresh=relative=='ping')
     contract,service=checked_contract(session,report,service_id)
-    audit_context(details={**AUDIT.get().get('details',{}),'stages':[
-        {'name':'접속 키','status':'pass'},{'name':'참여 세션 / VC 유효성','status':'pass'},
-        {'name':'서비스 계약 / 국가 정책','status':'pass'}]})
-    if path=='ping': return {'status':'ready','participant_id':session['participant_id'],'expires_at':min(session['expires'],contract['expires'])}
+    stages=[{'name':'접속 키','status':'pass'},{'name':'참여 세션 / VC 유효성','status':'pass'},
+            {'name':'서비스 계약 / 국가 정책','status':'pass'}]
+    audit_context(details={**AUDIT.get().get('details',{}),'stages':stages})
+    if relative=='ping': return {'status':'ready','participant_id':session['participant_id'],'expires_at':min(session['expires'],contract['expires'])}
     validate_data_url(service['data_url'])
     if service['data_url']=='demo://weather':
+        if relative not in DEMO_PATHS: raise HTTPException(404,'허용되지 않은 데이터 경로')
         return {'sample':True,'location':'Busan','temperature_c':24,'wind_speed_ms':5.2,'notice':'PoC 고정 샘플. 실제 기상/격자 API 응답 형식은 아닙니다.'}
     base=urlsplit(service['data_url'])
     if base.query or base.fragment: raise HTTPException(400,'서비스에는 쿼리 없는 API base URL을 등록해주세요')
+    origin=origin_of(service['data_url'])
+    target_path=base_path_of(service['data_url'])+'/'+relative
+    details=AUDIT.get().get('details',{})
+    details['upstream_path']=target_path
+    if target_path not in allowed_data_paths(origin):
+        stages.append({'name':'데이터 경로 허용','status':'fail'})
+        raise HTTPException(404,f'허용되지 않은 데이터 경로: {relative}')
+    stages.append({'name':'데이터 경로 허용','status':'pass'})
+    url=origin+target_path
     try:
-        with httpx.Client(timeout=30,follow_redirects=False) as client:
-            with client.stream('GET',service['data_url'].rstrip('/')+'/'+path,params=request.query_params.multi_items()) as r:
-                if not 200<=r.status_code<300: raise ValueError('provider rejected')
+        with httpx.Client(timeout=UPSTREAM_TIMEOUT,follow_redirects=False) as client:
+            with client.stream('GET',url,params=request.query_params.multi_items()) as r:
+                details['upstream_status']=r.status_code
+                if not 200<=r.status_code<300:
+                    if 300<=r.status_code<400:
+                        raise HTTPException(502,f'Weather API가 리다이렉트(HTTP {r.status_code})로 응답했습니다. 포털은 리다이렉트를 따르지 않습니다')
+                    detail=upstream_error_detail(r)
+                    raise HTTPException(502,f'Weather API 오류 응답 (HTTP {r.status_code})'+(f': {detail}' if detail else ''))
+                declared=r.headers.get('content-length')
+                if declared and declared.isdigit() and int(declared)>UPSTREAM_MAX_BYTES:
+                    raise HTTPException(502,f'Weather API 응답 크기 제한 초과 ({int(declared):,} bytes > {UPSTREAM_MAX_BYTES:,} bytes)')
                 chunks=[]; size=0
                 for chunk in r.iter_bytes():
                     size+=len(chunk)
-                    if size>5_000_000: raise ValueError('response too large')
+                    if size>UPSTREAM_MAX_BYTES:
+                        raise HTTPException(502,f'Weather API 응답 크기 제한 초과 ({UPSTREAM_MAX_BYTES:,} bytes)')
                     chunks.append(chunk)
-                return Response(b''.join(chunks),status_code=r.status_code,media_type=r.headers.get('content-type','application/octet-stream'),headers={'Content-Disposition':'attachment'})
-    except (httpx.HTTPError,ValueError):
-        raise HTTPException(502,'Weather API 호출 실패 또는 응답 크기 제한 초과')
+                body=b''.join(chunks)
+                media_type=r.headers.get('content-type','application/octet-stream')
+    except httpx.TimeoutException:
+        raise HTTPException(504,'Weather API 응답 시간 초과')
+    except httpx.HTTPError as e:
+        raise HTTPException(502,'Weather API 연결 실패: '+type(e).__name__)
+    details['response_bytes']=size
+    if 'json' in media_type.lower():
+        try:
+            keys,expires=issued_object_keys(json.loads(body))
+        except ValueError:
+            keys,expires=[],None
+        if keys:
+            # presigned URL은 bearer 자격이므로 로그에는 객체 키와 만료만 남김
+            details['issued_object_count']=len(keys)
+            details['issued_object_keys']=keys[:MAX_LOGGED_KEYS]
+            details['issued_keys_truncated']=len(keys)>MAX_LOGGED_KEYS
+            if expires is not None: details['presigned_expires_in_seconds']=expires
+    return Response(body,status_code=r.status_code,media_type=media_type,headers={'Content-Disposition':'attachment'})
 
 # Provision admin locally, before serving. Passwords are never embedded in source.
 def bootstrap_admin(username, password):
