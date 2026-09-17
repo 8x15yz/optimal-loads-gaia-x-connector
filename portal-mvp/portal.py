@@ -97,7 +97,9 @@ def db():
                  'ALTER TABLE services ADD COLUMN provider_import_id TEXT',
                  'ALTER TABLE services ADD COLUMN provider_name TEXT',
                  'ALTER TABLE services ADD COLUMN created REAL',
-                 'ALTER TABLE contracts ADD COLUMN provider_participant_id TEXT'):
+                 'ALTER TABLE contracts ADD COLUMN provider_participant_id TEXT',
+                 # 0.8.1: 가입 승인제. 기존 계정은 승인(1) 상태로 유지, 신규 가입만 0으로 저장
+                 'ALTER TABLE accounts ADD COLUMN approved INTEGER NOT NULL DEFAULT 1'):
         try:
             conn.execute(stmt)
         except sqlite3.OperationalError:
@@ -171,12 +173,16 @@ def register_account(req: RegisterRequest):
     ident = str(uuid.uuid4())
     try:
         with db() as c:
-            c.execute('INSERT INTO accounts(id,username,salt,password_hash,created) VALUES (?,?,?,?,?)',
+            c.execute('INSERT INTO accounts(id,username,salt,password_hash,created,approved) VALUES (?,?,?,?,?,0)',
                       (ident, req.username, salt, pw_hash, time.time()))
     except sqlite3.IntegrityError:
+        with db() as c:
+            existing = c.execute('SELECT approved FROM accounts WHERE username=?', (req.username,)).fetchone()
+        if existing and not existing['approved']:
+            raise HTTPException(409, '가입 승인 대기 중인 아이디입니다')
         raise HTTPException(409, '이미 사용 중인 아이디입니다')
-    audit_context(actor_id=ident, account_id=ident, summary='회원가입 완료')
-    return {'account_id': ident, 'username': req.username}
+    audit_context(actor_id=ident, account_id=ident, summary='가입 신청 (운영자 승인 대기)')
+    return {'account_id': ident, 'username': req.username, 'approved': False}
 
 class LoginRequest(BaseModel):
     username: str
@@ -190,6 +196,9 @@ def login_account(req: LoginRequest):
     ok = verify_password(req.password, salt, expected)
     if not row or not ok:
         raise HTTPException(401, '아이디 또는 비밀번호가 올바르지 않습니다')
+    # 비밀번호 확인 후에만 승인 여부를 알려 아이디만으로 가입 상태를 조회할 수 없게 함
+    if not row['approved']:
+        raise HTTPException(403, '관리자 승인 대기 중입니다')
     token = secrets.token_urlsafe(32)
     expires = time.time() + ACCOUNT_SESSION_TTL
     with db() as c:
@@ -1002,8 +1011,35 @@ def delete_data_origin(req: OriginRequest, authorization: str = Header('')):
 def admin_accounts(authorization: str = Header('')):
     require_admin(authorization)
     with db() as c:
-        rows=[dict(r) for r in c.execute('SELECT id,username,created FROM accounts ORDER BY created DESC')]
-    return {'accounts':[{**r,'is_operator':is_admin(r['id'])} for r in rows]}
+        rows=[dict(r) for r in c.execute('SELECT id,username,created,approved FROM accounts ORDER BY approved ASC, created DESC')]
+    return {'accounts':[{**r,'approved':bool(r['approved']),'is_operator':is_admin(r['id'])} for r in rows]}
+
+def pending_account(c, account_id):
+    row=c.execute('SELECT id,username,approved FROM accounts WHERE id=?',(account_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, '계정이 없습니다')
+    if row['approved']:
+        raise HTTPException(409, '이미 승인된 계정입니다')
+    return row
+
+@app.post('/admin/accounts/{account_id}/approve')
+def approve_account(account_id: str, authorization: str = Header('')):
+    require_admin(authorization)
+    with db() as c:
+        row=pending_account(c, account_id)
+        c.execute('UPDATE accounts SET approved=1 WHERE id=?',(account_id,))
+    audit_context(account_id=account_id, summary=f'가입 승인: {row["username"]}')
+    return {'status':'ok','account_id':account_id,'username':row['username']}
+
+@app.post('/admin/accounts/{account_id}/reject')
+def reject_account(account_id: str, authorization: str = Header('')):
+    """승인 대기 계정만 삭제. 삭제 후 같은 아이디로 다시 신청할 수 있음."""
+    require_admin(authorization)
+    with db() as c:
+        row=pending_account(c, account_id)
+        c.execute('DELETE FROM accounts WHERE id=?',(account_id,))
+    audit_context(summary=f'가입 거절: {row["username"]}')
+    return {'status':'ok','username':row['username']}
 
 @app.post('/admin/services/{service_id}/delete')
 def delete_service(service_id: str, authorization: str = Header('')):
@@ -1129,10 +1165,10 @@ def bootstrap_admin(username, password):
     with db() as c:
         row=c.execute('SELECT id FROM accounts WHERE username=?',(username,)).fetchone()
         if row:
-            c.execute('UPDATE accounts SET salt=?,password_hash=?,is_operator=1 WHERE id=?',(salt,pw_hash,row['id']))
+            c.execute('UPDATE accounts SET salt=?,password_hash=?,is_operator=1,approved=1 WHERE id=?',(salt,pw_hash,row['id']))
             c.execute('DELETE FROM account_sessions WHERE account_id=?',(row['id'],))
         else:
-            c.execute('INSERT INTO accounts(id,username,salt,password_hash,created,is_operator) VALUES (?,?,?,?,?,1)',
+            c.execute('INSERT INTO accounts(id,username,salt,password_hash,created,is_operator,approved) VALUES (?,?,?,?,?,1,1)',
                       (str(uuid.uuid4()),username,salt,pw_hash,time.time()))
 
 def revoke_operator(username):

@@ -24,7 +24,9 @@ class ConsoleTests(unittest.TestCase):
         self.admin=self.login('rootuser')
         self.users=[]
         for name in ('alice','bobby','carol'):
-            self.assertEqual(self.client.post('/accounts/register',json={'username':name,'password':'test-password-123'}).status_code,200)
+            r=self.client.post('/accounts/register',json={'username':name,'password':'test-password-123'})
+            self.assertEqual(r.status_code,200)
+            self.assertEqual(self.client.post(f"/admin/accounts/{r.json()['account_id']}/approve",headers=self.admin).status_code,200)
             self.users.append(self.login(name))
         now=datetime.now(timezone.utc)
         self.report={'profile':p.PROFILE,'eligible_for_demo':True,'summary':{'subject_id':'same-company','country':'KR','legal_name':'Test Company'},
@@ -111,6 +113,26 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(r.status_code,400)
         logs=self.client.get('/console/logs',headers=self.users[0]).json()['logs']
         self.assertEqual(logs[0]['result'],'fail')
+    def test_signup_requires_operator_approval(self):
+        cred={'username':'dave','password':'test-password-123'}
+        ident=self.client.post('/accounts/register',json=cred).json()['account_id']
+        r=self.client.post('/accounts/login',json=cred)
+        self.assertEqual(r.status_code,403);self.assertEqual(r.json()['detail'],'관리자 승인 대기 중입니다')
+        r=self.client.post('/accounts/register',json=cred)
+        self.assertEqual(r.status_code,409);self.assertEqual(r.json()['detail'],'가입 승인 대기 중인 아이디입니다')
+        # 틀린 비밀번호로는 대기 상태를 알 수 없음
+        self.assertEqual(self.client.post('/accounts/login',json={**cred,'password':'wrong-password-1'}).status_code,401)
+        self.assertEqual(self.client.post(f'/admin/accounts/{ident}/approve',headers=self.users[0]).status_code,403)
+        self.assertEqual(self.client.post(f'/admin/accounts/{ident}/approve',headers=self.admin).status_code,200)
+        self.assertEqual(self.client.post('/accounts/login',json=cred).status_code,200)
+        self.assertEqual(self.client.post('/accounts/register',json=cred).json()['detail'],'이미 사용 중인 아이디입니다')
+    def test_reject_pending_signup_frees_username(self):
+        cred={'username':'erin','password':'test-password-123'}
+        ident=self.client.post('/accounts/register',json=cred).json()['account_id']
+        self.assertEqual(self.client.post(f'/admin/accounts/{ident}/reject',headers=self.admin).status_code,200)
+        self.assertEqual(self.client.post('/accounts/register',json=cred).status_code,200)
+        approved=self.client.get('/accounts/me',headers=self.users[0]).json()['account_id']
+        self.assertEqual(self.client.post(f'/admin/accounts/{approved}/reject',headers=self.admin).status_code,409)
     def test_admin_registration_reserved(self):
         r=self.client.post('/accounts/register',json={'username':'admin','password':'test-password-123'})
         self.assertEqual(r.status_code,403)

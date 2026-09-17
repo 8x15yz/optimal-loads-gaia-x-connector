@@ -1872,6 +1872,62 @@ const UI_MESSAGES = {
       "Run a connection check or data request to see the response here."
     ]
   },
+  "m196": {
+    "ko": [
+      "가입 신청이 접수되었습니다. 관리자 승인 후 로그인할 수 있습니다."
+    ],
+    "en": [
+      "Sign-up request received. You can sign in once an operator approves it."
+    ]
+  },
+  "m197": {
+    "ko": [
+      "승인 대기"
+    ],
+    "en": [
+      "Pending approval"
+    ]
+  },
+  "m198": {
+    "ko": [
+      "승인"
+    ],
+    "en": [
+      "Approve"
+    ]
+  },
+  "m199": {
+    "ko": [
+      "거절"
+    ],
+    "en": [
+      "Reject"
+    ]
+  },
+  "m200": {
+    "ko": [
+      " 계정을 승인했습니다."
+    ],
+    "en": [
+      " has been approved."
+    ]
+  },
+  "m201": {
+    "ko": [
+      "가입 신청을 거절하고 계정을 삭제할까요? 같은 아이디로 다시 신청할 수 있습니다."
+    ],
+    "en": [
+      "Reject this sign-up and delete the account? The same username can apply again."
+    ]
+  },
+  "m202": {
+    "ko": [
+      " 가입 신청을 거절했습니다."
+    ],
+    "en": [
+      " sign-up request rejected."
+    ]
+  },
   "shell195": {
     "ko": [
       "Blue-X 홈"
@@ -2299,6 +2355,10 @@ const DIAGNOSTIC_TRANSLATIONS = {
   "아이디는 영문/숫자/._- 3~32자여야 합니다": "Use 3–32 letters, numbers or ._- for the username.",
   "비밀번호는 8~128자여야 합니다": "The password must contain 8–128 characters.",
   "이미 사용 중인 아이디입니다": "This username is already in use.",
+  "가입 승인 대기 중인 아이디입니다": "This username is awaiting operator approval.",
+  "관리자 승인 대기 중입니다": "Your account is awaiting operator approval.",
+  "이미 승인된 계정입니다": "This account is already approved.",
+  "가입 신청 (운영자 승인 대기)": "Sign-up requested (awaiting operator approval)",
   "아이디 또는 비밀번호가 올바르지 않습니다": "Incorrect username or password.",
   "참여 세션이 만료되었습니다": "The participant session has expired.",
   "자격증명 유효기간이 지났습니다": "The credentials have expired.",
