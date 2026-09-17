@@ -3,6 +3,7 @@ name: Deploy to VM
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -11,21 +12,20 @@ jobs:
       - name: SSH into VM and deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 35.212.206.187
+          host: ${{ secrets.VM_HOST }}
           username: g8x15yz
           key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd ~/optimal-loads-gaia-x-connector/portal-mvp
             git pull origin main
-            
-            # 가상환경 폴더가 .venv 인지 venv 인지 확인 후 맞춰서 실행
+
             if [ -d ".venv" ]; then
               source .venv/bin/activate
             elif [ -d "venv" ]; then
               source venv/bin/activate
             fi
 
-            # requirements-lock.txt 파일이 있으면 우선 설치
             if [ -f "requirements-lock.txt" ]; then
               pip install -r requirements-lock.txt
             else
@@ -33,3 +33,5 @@ jobs:
             fi
 
             sudo systemctl restart portal
+            sleep 3
+            curl -fsS -o /dev/null -w "health: %{http_code}\n" -H "Host: blue-x.bmap.kr" http://127.0.0.1:8000
