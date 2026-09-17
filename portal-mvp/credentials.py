@@ -162,6 +162,36 @@ def date_value(value):
         raise ValueError('시간대 필요')
     return dt
 
+CRITERIA_BASE = 'https://docs.gaia-x.eu/policy-rules-committee/compliance-document/'
+
+def compliance_profile(policy):
+    """Compliance VC 수용 기준. Lab 발급 형식·규칙 버전이 자주 바뀌어 버전 문자열은 필수 판정에 쓰지 않음.
+
+    구 정책 파일(accepted_profiles 또는 required_criteria만 있음)도 그대로 동작하도록 변환.
+    """
+    prof = policy.get('compliance_profile')
+    if isinstance(prof, dict):
+        return {'label_levels': prof.get('label_levels', ['SC']),
+                'known_rules_versions': prof.get('known_rules_versions', []),
+                'required_criteria_suffixes': prof.get('required_criteria_suffixes', ['criteria_participant/#PA1.1'])}
+    legacy = policy.get('accepted_profiles') or {'CD25.10': {'label_levels': ['SC'], 'required_criteria': policy.get('required_criteria', [])}}
+    levels = sorted({l for v in legacy.values() for l in v.get('label_levels', [])}) or ['SC']
+    suffixes = sorted({c.split('/compliance-document/', 1)[-1].split('/', 1)[-1] for v in legacy.values() for c in v.get('required_criteria', [])})
+    return {'label_levels': levels, 'known_rules_versions': list(legacy), 'required_criteria_suffixes': suffixes or ['criteria_participant/#PA1.1']}
+
+def ref_credential_type(ref):
+    """참조 유형 키 변천: type(09/08) → gx:credentialType(09/16~). 접두사 없는 표기도 수용."""
+    value = ref.get('gx:credentialType') or ref.get('credentialType') or ref.get('type')
+    if isinstance(value, list):
+        value = next((v for v in value if isinstance(v, str) and v.removeprefix('gx:') in {t.removeprefix('gx:') for t in REQUIRED}), None)
+    if isinstance(value, str) and not value.startswith('gx:') and ':' not in value:
+        value = 'gx:' + value
+    return value
+
+def ref_digest(ref):
+    """해시 키 변천: gx:digestSRI(~09/16) → digestSRI(W3C VC v2, 09/17~)."""
+    return ref.get('gx:digestSRI') or ref.get('digestSRI')
+
 def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remote_bytes, policy=None, now=None):
     policy = load_policy() if policy is None else policy
     if policy.get('profile')!=PROFILE: raise ValueError('검증 정책 프로필 불일치')
@@ -272,17 +302,26 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
             if not isinstance(ref, dict):
                 hash_ok = False; continue
             target = next((d for d in docs if d['payload'].get('id') == ref.get('id') and d['kind'] != 'gx:LabelCredential'), None)
-            ref_type = ref.get('gx:credentialType') or ref.get('type')
+            ref_type = ref_credential_type(ref)
             if not target or ref.get('id') in ref_ids or ref_type != target['kind']:
                 hash_ok = False; continue
             ref_ids.add(ref['id'])
-            digest = 'sha256-' + hashlib.sha256(rfc8785.dumps(target['payload'])).hexdigest()
-            hash_ok = hash_ok and digest == ref.get('gx:digestSRI')
+            sri = ref_digest(ref)
+            raw = hashlib.sha256(rfc8785.dumps(target['payload'])).digest()
+            accepted = {'sha256-' + raw.hex(), 'sha256-' + base64.b64encode(raw).decode()}
+            hash_ok = hash_ok and isinstance(sri, str) and sri in accepted
         expected = {groups[t][0]['payload']['id'] for t in REQUIRED - {'gx:LabelCredential'}}
         check('세트', 'Compliance ID·해시', 'pass' if hash_ok and ref_ids == expected else 'fail',
               'VC 본문 RFC 8785(JCS) → SHA-256 hex; 참조 대상 3개와 대조')
-        check('세트', '검사 프로필', 'pass' if cp.get('gx:labelLevel') == 'SC' and cp.get('gx:rulesVersion') == 'CD25.10' else 'fail',
-              '이번 데모는 SC / CD25.10 샘플 프로필을 명시적으로 수용')
+        profile = compliance_profile(policy)
+        label, rules = cp.get('gx:labelLevel'), cp.get('gx:rulesVersion')
+        rules_present = isinstance(rules, str) and bool(rules.strip())
+        check('세트', '검사 프로필', 'pass' if label in profile['label_levels'] and rules_present else 'fail',
+              f'labelLevel {"/".join(profile["label_levels"])} 및 rulesVersion 존재 확인; 제출값 {label} / {rules}')
+        known = rules in profile['known_rules_versions']
+        check('세트', '규칙 버전', 'pass' if known else 'warning',
+              f'확인된 버전({", ".join(profile["known_rules_versions"]) or "없음"})' + ('과 일치' if known else f'에 없는 {rules}; Lab 버전 변경으로 보고 연결은 허용'),
+              False, 'rules_version')
         tc = groups['gx:Issuer'][0]['payload']
         lp_doc,tc_doc = groups['gx:LegalPerson'][0],groups['gx:Issuer'][0]
         linked_issuer=lp.get('issuer')==tc.get('issuer') and lp_doc['header'].get('kid')==tc_doc['header'].get('kid')
@@ -290,8 +329,10 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
         terms=tc['credentialSubject'].get('gaiaxTermsAndConditions')
         check('세트','약관 해시','pass' if isinstance(terms,str) and terms in policy.get('accepted_terms_hashes',[]) else 'fail','운영자가 고정한 샘플 약관 해시와 비교; 법적 대표 권한 증명이 아님',code='terms_hash')
         criteria=cp.get('gx:validatedCriteria',[])
-        criteria_ok=isinstance(criteria,list) and all(isinstance(x,str) for x in criteria) and set(policy.get('required_criteria',[]))<=set(criteria)
-        check('세트','Compliance 기준','pass' if criteria_ok else 'fail','서명된 validatedCriteria에 프로필 필수 기준 포함 여부',code='criteria')
+        criteria_ok=(isinstance(criteria,list) and all(isinstance(x,str) for x in criteria) and
+                     all(any(x.startswith(CRITERIA_BASE) and x.endswith('/'+sfx) for x in criteria) for sfx in profile['required_criteria_suffixes']))
+        check('세트','Compliance 기준','pass' if criteria_ok else 'fail',
+              f'서명된 validatedCriteria에 필수 기준({", ".join(profile["required_criteria_suffixes"])}) 포함 여부; 문서 버전 경로는 무관',code='criteria')
         lei=lrn['credentialSubject'].get('schema:leiCode','')
         valid_lei=isinstance(lei,str) and bool(re.fullmatch(r'[A-Z0-9]{18}[0-9]{2}',lei))
         if valid_lei:

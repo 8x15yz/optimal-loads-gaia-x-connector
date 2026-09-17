@@ -50,7 +50,7 @@ export PORTAL_VERIFICATION_POLICY=/absolute/path/verification-policy.json
 
 - `certificate_sources`: 각 데모 issuer가 사용할 수 있는 정확한 인증서 URL과 데모 루트 SHA-256 지문입니다. 검증 요청에서 받은 루트를 자동으로 신뢰하지 않습니다. Lab 루트 및 공개 CA 루트가 섞여 있어도 공식 Gaia-X trust anchor 인정은 별도입니다.
 - `accepted_terms_hashes`: 이 PoC가 수용하는 샘플 약관 해시입니다. 약관 원문/버전을 확인한 후 운영자가 변경합니다.
-- `required_criteria`: Compliance VC에 포함되어야 하는 서명된 기준 ID입니다. 현재 PA1.1을 요구합니다. 기준에 대한 외부 심사를 포털이 재수행하는 것은 아닙니다.
+- `compliance_profile`: Compliance VC 수용 기준입니다. `label_levels`(현재 SC)와 `required_criteria_suffixes`(현재 `criteria_participant/#PA1.1`, 문서 버전 경로는 무관)는 필수이고, `known_rules_versions`에 없는 rulesVersion은 `주의`로만 표시되어 연결을 막지 않습니다. 참조 키는 `type`/`gx:credentialType`, `gx:digestSRI`/`digestSRI`를 모두 수용합니다.
 - `status_list_urls`: `{ "정확한 HTTPS 목록 URL": "해당 VC의 issuer DID" }` 형태입니다. 기본값은 빈 객체입니다. 제공된 샘플에 상태 목록 정보가 없으므로 임의 목록을 추가하지 않았습니다.
 
 인증서 교체 시 leaf 키 변경은 현재 DID와 일치해야 하고, 루트 변경은 운영자가 출처를 확인한 뒤 지문을 갱신해야 합니다. 유효성 검사를 끄는 방식으로 해결하지 마세요. 런타임 context는 네트워크에서 재다운로드하지 않으며, SHACL/context 변경 시 `schemas/manifest.json`의 SHA-256도 검토 후 갱신하고 서버를 재시작해야 합니다.
