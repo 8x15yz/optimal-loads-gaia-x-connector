@@ -18,15 +18,17 @@ import httpx
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from accounts import hash_password, valid_password, valid_username, verify_password
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='BLUEMAP · Management Console PoC', version='0.6.0')
+app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.7.0')
+app.mount('/assets', StaticFiles(directory=ROOT / 'assets'), name='assets')
 app.state.port = 8000
-app.state.name = 'BLUEMAP Demo'
+app.state.name = 'Blue-X'
 app.state.db = ROOT / 'data' / 'portal-8000.sqlite3'
 app.state.resolver = None  # injection points for deterministic offline tests
 app.state.resource_fetcher = None
@@ -1146,7 +1148,7 @@ if __name__ == '__main__':
     import uvicorn
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=8000)
-    parser.add_argument('--name', default='BLUEMAP Demo')
+    parser.add_argument('--name', default='Blue-X')
     parser.add_argument('--host', default='0.0.0.0')
     args = parser.parse_args()
     app.state.port, app.state.name = args.port, args.name
