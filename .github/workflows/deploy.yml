@@ -32,6 +32,6 @@ jobs:
               pip install -r requirements.txt
             fi
 
-            sudo systemctl restart portal
+            sudo -n systemctl restart portal
             sleep 3
             curl -fsS -o /dev/null -w "health: %{http_code}\n" -H "Host: blue-x.bmap.kr" http://127.0.0.1:8000
