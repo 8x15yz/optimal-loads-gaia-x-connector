@@ -1928,6 +1928,150 @@ const UI_MESSAGES = {
       " sign-up request rejected."
     ]
   },
+  "m203": {
+    "ko": [
+      "리포트 다운로드"
+    ],
+    "en": [
+      "Download report"
+    ]
+  },
+  "m204": {
+    "ko": [
+      "자격증명을 찾을 수 없습니다. 새로고침 후 다시 시도하세요."
+    ],
+    "en": [
+      "Credential set not found. Refresh and try again."
+    ]
+  },
+  "m205": {
+    "ko": [
+      "VC 검증 리포트"
+    ],
+    "en": [
+      "Credential verification report"
+    ]
+  },
+  "m206": {
+    "ko": [
+      "항목"
+    ],
+    "en": [
+      "Item"
+    ]
+  },
+  "m207": {
+    "ko": [
+      "값"
+    ],
+    "en": [
+      "Value"
+    ]
+  },
+  "m208": {
+    "ko": [
+      "조직"
+    ],
+    "en": [
+      "Organization"
+    ]
+  },
+  "m209": {
+    "ko": [
+      "국가"
+    ],
+    "en": [
+      "Country"
+    ]
+  },
+  "m210": {
+    "ko": [
+      "세트 ID"
+    ],
+    "en": [
+      "Set ID"
+    ]
+  },
+  "m211": {
+    "ko": [
+      "등록 시각"
+    ],
+    "en": [
+      "Registered"
+    ]
+  },
+  "m212": {
+    "ko": [
+      "유효기간"
+    ],
+    "en": [
+      "Valid until"
+    ]
+  },
+  "m213": {
+    "ko": [
+      "판정"
+    ],
+    "en": [
+      "Result"
+    ]
+  },
+  "m214": {
+    "ko": [
+      "검사 결과 수"
+    ],
+    "en": [
+      "Check counts"
+    ]
+  },
+  "m215": {
+    "ko": [
+      "리포트 생성 시각"
+    ],
+    "en": [
+      "Report generated"
+    ]
+  },
+  "m216": {
+    "ko": [
+      "검사"
+    ],
+    "en": [
+      "Check"
+    ]
+  },
+  "m217": {
+    "ko": [
+      "상태"
+    ],
+    "en": [
+      "Status"
+    ]
+  },
+  "m218": {
+    "ko": [
+      "상세"
+    ],
+    "en": [
+      "Details"
+    ]
+  },
+  "m219": {
+    "ko": [
+      "검사 결과가 없습니다."
+    ],
+    "en": [
+      "No check results."
+    ]
+  },
+  "m220": {
+    "ko": [
+      "검증 리포트를 다운로드했습니다."
+    ],
+    "en": [
+      "Verification report downloaded."
+    ]
+  },
   "shell195": {
     "ko": [
       "Blue-X 홈"
