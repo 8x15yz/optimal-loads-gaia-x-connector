@@ -1,4 +1,4 @@
-# Blue-X · Trusted Data Transactions PoC — 0.7.0
+# Blue-X · Trusted Data Transactions PoC — 0.8.0
 
 기존 VC 검증기를 유지하면서, 한 계정이 **VC 등록 → 참여 세션 연결 → 서비스 제공 또는 계약 → 고정 주소 데이터 조회 → 초기화 → 재연결**을 실행할 수 있습니다.
 

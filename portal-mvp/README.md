@@ -1,4 +1,6 @@
-> **Blue-X v0.7.0 UI 업데이트:** 브랜딩·참여자 개요·자격증명·서비스 이용 UI를 개선했습니다. 가입 계정은 모두 참여자(제공·이용 겸용)이며 관리자는 운영자 권한으로 분리했습니다. 화면 변경은 [UI_CHANGES.md](UI_CHANGES.md), 현재 실행·운영자 설정·시연 순서는 [POC_GUIDE.md](POC_GUIDE.md)를 먼저 확인하세요. 아래는 기존 검증기 설명으로, 화면·세션/계약 수명·서비스 관리 권한 설명은 새 안내가 우선합니다.
+> **Language / 언어:** English is the default. Use the Language selector to switch to 한국어. Your preference is saved in this browser.
+
+> **Blue-X v0.8.0 UI 업데이트:** 브랜딩·참여자 개요·자격증명·서비스 이용 UI를 개선했습니다. 가입 계정은 모두 참여자(제공·이용 겸용)이며 관리자는 운영자 권한으로 분리했습니다. 화면 변경은 [UI_CHANGES.md](UI_CHANGES.md), 현재 실행·운영자 설정·시연 순서는 [POC_GUIDE.md](POC_GUIDE.md)를 먼저 확인하세요. 아래는 기존 검증기 설명으로, 화면·세션/계약 수명·서비스 관리 권한 설명은 새 안내가 우선합니다.
 
 # Blue-X · Trusted Data Transactions 
 

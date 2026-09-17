@@ -25,7 +25,7 @@ from accounts import hash_password, valid_password, valid_username, verify_passw
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.7.0')
+app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.8.0')
 app.mount('/assets', StaticFiles(directory=ROOT / 'assets'), name='assets')
 app.state.port = 8000
 app.state.name = 'Blue-X'
