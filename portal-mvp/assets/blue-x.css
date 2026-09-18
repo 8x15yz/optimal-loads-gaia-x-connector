@@ -25,3 +25,5 @@ html[lang=en] .stat-number small{display:none}
 @media(max-width:520px){.integration-heading,.integration-step{padding:18px 14px}.integration-heading{align-items:flex-start;flex-direction:column}.integration-expiry,.integration-note{padding:12px 14px}.endpoint-control{flex-wrap:wrap}.endpoint-control input{flex-basis:100%;width:100%}.integration-heading h3{font-size:18px}}
 
 .expiry-guidance{flex-basis:100%;font-size:11px;line-height:1.7;color:#777186}
+
+.session-settings{border-top:3px solid #7660d4}.session-settings h2{margin:5px 0 0}.session-settings .notice-policy{background:#f5f2ff;color:#675d84;padding:13px 16px;border-radius:10px;font-size:12px;line-height:1.8;margin-top:16px}.session-settings small{display:block;margin-top:9px}

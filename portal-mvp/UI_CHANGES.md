@@ -1,3 +1,11 @@
+# 운영자 참여 세션 시간 설정
+
+- 운영 관리 상단에서 참여 세션 시간을 정수 초로 저장 (1~604800초, 기본 86400초).
+- 전체 계정의 새 세션 연결부터 적용. 기존 세션·계약·접속 키 및 계정 로그인 세션 변경 없음.
+- VC·인증서 등의 검증 유효기한을 넘길 수 없음. 두 참여 세션 생성 경로에 동일하게 적용.
+- 운영자 인증이 필요한 GET/POST /admin/session-settings 추가. SQLite portal_settings에 저장하고 감사 로그 기록.
+- 기존 data/ DB를 보존하세요. 재시작 시 설정 테이블 자동 생성. portal.py 및 assets/blue-x.js, assets/i18n.js, assets/blue-x.css 교체 후 재시작.
+
 ## Ping 응답 형식 변경
 
 - Ping 응답의 participant_id 제외. 내부 참여자 식별 및 다른 API 응답은 유지.

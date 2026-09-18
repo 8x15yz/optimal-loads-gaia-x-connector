@@ -73,6 +73,7 @@ def db():
     conn.row_factory = sqlite3.Row
     had_paths_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='data_origin_paths'").fetchone()
     conn.executescript('''
+    CREATE TABLE IF NOT EXISTS portal_settings(name TEXT PRIMARY KEY, value INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, created REAL);
     CREATE TABLE IF NOT EXISTS account_sessions(token_hash TEXT PRIMARY KEY, account_id TEXT, expires REAL);
     CREATE TABLE IF NOT EXISTS imports(id TEXT PRIMARY KEY, tokens TEXT, report TEXT, account_id TEXT, created REAL);
@@ -339,7 +340,7 @@ def activate(req: Recheck, x_portal_local: str = Header(''), authorization: str 
     subject = report['summary']['subject_id']
     # This is explicitly a local demo mapping, not proof of the uploader's legal identity.
     pid = participant_id_for(subject)
-    expires = min(time.time() + 24 * 3600, date_value(report['valid_until']).timestamp())
+    expires = min(time.time() + participant_session_ttl(), date_value(report['valid_until']).timestamp())
     with db() as c:
         c.execute('DELETE FROM contracts WHERE account_id=?', (acc['account_id'],))
         c.execute('DELETE FROM sessions WHERE account_id=?', (acc['account_id'],))
@@ -755,6 +756,36 @@ def require_admin(authorization):
         raise HTTPException(403, '관리자 권한이 필요합니다')
     return acc
 
+DEFAULT_PARTICIPANT_SESSION_SECONDS = 86400
+MAX_PARTICIPANT_SESSION_SECONDS = 604800
+
+def participant_session_ttl():
+    with db() as c:
+        row = c.execute("SELECT value FROM portal_settings WHERE name='participant_session_seconds'").fetchone()
+    return int(row['value']) if row else DEFAULT_PARTICIPANT_SESSION_SECONDS
+
+class ParticipantSessionSettings(BaseModel):
+    participant_session_seconds: int = Field(strict=True, ge=1, le=MAX_PARTICIPANT_SESSION_SECONDS)
+
+@app.get('/admin/session-settings')
+def get_session_settings(authorization: str = Header('')):
+    require_admin(authorization)
+    return {'participant_session_seconds': participant_session_ttl(),
+            'default_seconds': DEFAULT_PARTICIPANT_SESSION_SECONDS,
+            'max_seconds': MAX_PARTICIPANT_SESSION_SECONDS}
+
+@app.post('/admin/session-settings')
+def save_session_settings(req: ParticipantSessionSettings, authorization: str = Header('')):
+    require_admin(authorization)
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO portal_settings(name,value) VALUES ('participant_session_seconds',?)",
+                  (req.participant_session_seconds,))
+    audit_context(action='session-settings', summary='참여 세션 시간 변경',
+                  details={'participant_session_seconds': req.participant_session_seconds,
+                           'applies_to': 'new_sessions'})
+    return {'participant_session_seconds': req.participant_session_seconds}
+
+
 def target_account(authorization, account_id=None):
     acc = account_auth(authorization)
     target = account_id or acc['account_id']
@@ -836,7 +867,7 @@ class ConsoleAction(BaseModel):
 @app.post('/console/{action}')
 def console_action(action: str, req: ConsoleAction, authorization: str = Header('')):
     target = target_account(authorization, req.account_id)
-    audit_context(action=action, summary={'connect':'참여 세션 연결 (최대 24시간)', 'reset':'세션·계약 초기화 (접속 주소 유지)',
+    audit_context(action=action, summary={'connect':'참여 세션 연결 (운영자 설정 적용)', 'reset':'세션·계약 초기화 (접속 주소 유지)',
         'delete-vc':'VC 삭제 및 연결된 세션·계약 해제', 'recheck':'VC 재검증', 'rotate-key':'접속 키 재발급',
         'contract':'서비스 계약', 'revoke-contract':'서비스 계약 해지'}.get(action, action))
     if action in {'delete-vc','recheck','connect'}:
@@ -849,7 +880,7 @@ def console_action(action: str, req: ConsoleAction, authorization: str = Header(
             c.execute('UPDATE imports SET report=? WHERE id=?', (json.dumps(report),req.import_id))
         if action == 'recheck': return {'report':report}
         if not report['eligible_for_demo']: raise HTTPException(403, 'VC 검증을 통과해야 세션을 연결할 수 있습니다')
-        expires = min(time.time()+24*3600, date_value(report['valid_until']).timestamp())
+        expires = min(time.time()+participant_session_ttl(), date_value(report['valid_until']).timestamp())
         if expires <= time.time(): raise HTTPException(403, 'VC 유효기간이 지났습니다')
         pid = participant_id_for(report['summary']['subject_id'])
         with db() as c:
