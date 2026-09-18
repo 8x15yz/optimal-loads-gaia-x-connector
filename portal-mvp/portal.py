@@ -1,5 +1,6 @@
 """Account-scoped FastAPI PoC console. External credentials are imported, never issued here."""
 import argparse
+from datetime import datetime, timezone, timedelta
 import hashlib
 import ipaddress
 import json
@@ -25,7 +26,7 @@ from accounts import hash_password, valid_password, valid_username, verify_passw
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.8.0')
+app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.9.0')
 app.mount('/assets', StaticFiles(directory=ROOT / 'assets'), name='assets')
 app.state.port = 8000
 app.state.name = 'Blue-X'
@@ -1103,7 +1104,10 @@ def fixed_access(key: str, service_id: str, path: str, request: Request):
     stages=[{'name':'접속 키','status':'pass'},{'name':'참여 세션 / VC 유효성','status':'pass'},
             {'name':'서비스 계약 / 국가 정책','status':'pass'}]
     audit_context(details={**AUDIT.get().get('details',{}),'stages':stages})
-    if relative=='ping': return {'status':'ready','participant_id':session['participant_id'],'expires_at':min(session['expires'],contract['expires'])}
+    if relative=='ping':
+        return {'status':'ready','participant_id':session['participant_id'],
+                'expires_at':min(session['expires'],contract['expires']),
+                'lastPrivateInteractionTime':datetime.now(timezone(timedelta(hours=9))).strftime('%Y%m%dT%H%M%S%z')}
     validate_data_url(service['data_url'])
     if service['data_url']=='demo://weather':
         if relative not in DEMO_PATHS: raise HTTPException(404,'허용되지 않은 데이터 경로')

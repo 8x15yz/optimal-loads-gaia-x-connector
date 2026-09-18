@@ -2122,10 +2122,10 @@ const UI_MESSAGES = {
   },
   "shell201": {
     "ko": [
-      "시스템 정보 · v0.8.0 · loire-demo-v2 ⓘ"
+      "시스템 정보 · v0.9.0 · loire-demo-v2 ⓘ"
     ],
     "en": [
-      "System information · v0.8.0 · loire-demo-v2 ⓘ"
+      "System information · v0.9.0 · loire-demo-v2 ⓘ"
     ]
   },
   "shell202": {
@@ -2549,6 +2549,7 @@ const DIAGNOSTIC_TRANSLATIONS = {
   "폐기 상태": "Revocation status",
   "소유자 증명": "Holder proof"
 };
+Object.assign(UI_MESSAGES,{"ix_show": {"en": ["Show / hide"], "ko": ["표시 / 숨김"]}, "ix_title": {"en": ["Connection details"], "ko": ["연계 접속 정보"]}, "ix_contract": {"en": ["Contract active"], "ko": ["계약 활성"]}, "ix_until": {"en": ["Session / contract valid until"], "ko": ["세션·계약 이용 기한"]}, "ix_base": {"en": ["Service base URL"], "ko": ["서비스 접근 기본 URL"]}, "ix_base_hint": {"en": ["Set this URL once in your client configuration."], "ko": ["클라이언트 설정에 이 주소를 등록하세요."]}, "ix_ids": {"en": ["Access key & service ID"], "ko": ["접속 키 · 서비스 ID"]}, "ix_service": {"en": ["Service ID"], "ko": ["서비스 ID"]}, "ix_key": {"en": ["Access key"], "ko": ["접속 키"]}, "ix_key_hint": {"en": ["The key identifies the consumer account. A separate consumer ID is not needed. Rotating the key or recreating the service changes the URL."], "ko": ["접속 키로 이용 계정을 식별하므로 별도 컨수머 ID는 필요하지 않습니다. 키 재발급·서비스 재등록 시 주소가 변경됩니다."]}, "ix_ping": {"en": ["Check access"], "ko": ["이용 가능 상태 확인"]}, "ix_ping_hint": {"en": ["Check credentials, session and contract before requesting data."], "ko": ["데이터 요청 전에 자격증명·세션·계약 상태를 확인하세요."]}, "ix_ping_test": {"en": ["Test Ping"], "ko": ["Ping 테스트"]}, "ix_ping_status": {"en": ["Success: HTTP 200 · status: ready"], "ko": ["성공: HTTP 200 · status: ready"]}, "ix_data": {"en": ["Request data"], "ko": ["데이터 요청"]}, "ix_data_hint": {"en": ["Append your existing date, area and weather query parameters. Only permitted paths are listed."], "ko": ["기존 날짜·공간·기상 쿼리 파라미터를 붙이세요. 허용된 경로만 표시합니다."]}, "ix_test": {"en": ["Try a data request"], "ko": ["데이터 요청 테스트"]}, "ix_note": {"en": ["URLs contain an access key. Share them only with the integration developer. Ping checks access, not Weather API availability. Data requests check access again."], "ko": ["주소에는 접속 키가 포함됩니다. 연계 담당자에게만 전달하세요. Ping은 이용 권한을 확인하며 Weather API의 가용성을 보장하지 않습니다. 데이터 요청 시 권한을 다시 검사합니다."]}});
 let uiLocale='en';
 try {uiLocale=localStorage.getItem('blue-x-language')==='ko'?'ko':'en';} catch {}
 function t(key,...values){const parts=UI_MESSAGES[key]?.[uiLocale]||UI_MESSAGES[key]?.en;if(!parts)return key;return parts.map((s,i)=>s+(i<values.length?String(values[i]??''):'')).join('')}

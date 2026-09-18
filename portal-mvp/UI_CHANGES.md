@@ -1,3 +1,20 @@
+# Blue-X v0.9.0 — 서비스 연계 접속 정보
+
+- 서비스 이용의 활성 계약에 서비스 접근 기본 URL, Ping URL, 허용된 데이터 경로별 URL을 표시함. 각각 표시/숨김 및 복사 기능 제공.
+- 접속 키와 서비스 ID를 구분하고 접속 키는 기본 마스킹. 별도 컨수머 ID는 불필요함을 안내.
+- 세션·계약 중 먼저 만료되는 시각을 표시. 기존 서버의 매 요청 권한 검사를 유지.
+- Ping 테스트와 데이터 쿼리 테스트를 구분. 기존 날짜·영역·기상 쿼리를 그대로 입력 가능.
+- 영어 기본 및 한국어 전환 지원. 모바일에서는 주소와 복사 버튼을 줄바꿈 배치.
+- 성공 Ping 응답에 한국 시간의 lastPrivateInteractionTime 추가 (YYYYMMDDTHHMMSS+0900).
+- 등록된 서비스의 허용 경로만 표시하며 griddata/gridfile을 임의 추가하지 않음.
+
+배포: portal.py, console.html, assets/blue-x.js, assets/blue-x.css, assets/i18n.js를 함께 교체하고 서버 재시작. 기존 data/ 및 배포 환경 설정 보존.
+브라우저에서 Web ECDIS가 직접 호출한다면 해당 Origin을 PORTAL_ALLOWED_ORIGINS에 허용해야 함.
+
+검증: Python/JavaScript 문법 및 Node 렌더 검사(주소 생성, 이스케이프, 키 마스킹, 한영 문구, 허용 경로, 세션 만료 시 도구 숨김) 통과. 브라우저 설치 다운로드 실패로 실제 화면 캡처 검증은 수행하지 못함. pytest 미설치로 기존 Python 통합 테스트는 실행하지 못함.
+
+---
+
 # Blue-X v0.8.0 — English / 한국어
 
 - 기본 UI는 영어입니다. 왼쪽 메뉴 상단의 Language 선택기로 English / 한국어를 전환합니다. 모바일에서는 상단 오른쪽에 표시됩니다.

@@ -6,3 +6,20 @@ pre,code,.key{font-family:ui-monospace,SFMono-Regular,Consolas,'Malgun Gothic','
 @media(max-width:850px){.locale-switch{position:absolute;right:20px;top:18px;margin:0}.locale-switch label{display:none}.locale-switch select{padding:6px 9px}.brand-sub{margin-bottom:18px}html[lang=en] .hero>.row>div{max-width:100%}html[lang=en] .grid{grid-template-columns:1fr}html[lang=en] .steps{grid-template-columns:1fr}.footnote{overflow-wrap:anywhere}}
 html[lang=en] .stat-number small{display:none}
 @media(min-width:851px){html[lang=en] .grid>.card{display:flex;flex-direction:column}html[lang=en] .grid .stat-footer{margin-top:auto;padding-top:18px}html[lang=en] .grid>.card>small{margin-bottom:18px}}
+
+/* Connection details: consistent copyable endpoints and ordered setup steps. */
+.service-grid:has(.integration-panel){grid-template-columns:1fr}
+.integration-panel{margin-top:24px;border:1px solid #dcd8f6;border-radius:16px;overflow:hidden;background:#fff}
+.integration-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 24px;background:linear-gradient(115deg,#f2efff,#f8faff)}
+.integration-heading h3{font-size:20px;margin:6px 0 0}.integration-heading .eyebrow{font-size:10px;letter-spacing:1.5px}
+.integration-expiry{display:flex;justify-content:space-between;gap:12px;padding:12px 24px;background:#faf9ff;border-top:1px solid #eeebfa;color:#66617c;font-size:12px;flex-wrap:wrap}
+.integration-expiry strong{color:#44377a;font-weight:600}
+.integration-step{padding:22px 24px;border-top:1px solid #eeeaf6}
+.step-heading{display:flex;gap:12px;align-items:flex-start;margin-bottom:16px}.step-number{display:grid;place-items:center;background:#eeebff;color:#5b46bb;border-radius:10px;min-width:34px;height:34px;font-size:12px;font-weight:700}
+.step-heading h3{margin:0;font-size:15px}.step-heading p{margin:5px 0 0;color:#79758a;font-size:12px;line-height:1.6}
+.endpoint-field{margin:12px 0}.endpoint-field label{display:block;margin:0 0 7px;font-size:11px;color:#68627e;font-weight:600}
+.endpoint-control{display:flex;gap:7px;align-items:center}.endpoint-control input{min-width:0;flex:1;width:0;margin:0;background:#f8f9fc;font-size:12px!important;height:40px;border-color:#e2e3ed}.endpoint-control button{white-space:nowrap;font-size:11px;padding:10px 12px}
+.integration-ids,.integration-test{border:0;background:#f9f9fc;border-radius:10px;padding:12px 14px;margin-top:16px}.integration-ids summary,.integration-test summary{font-size:12px;font-weight:600;color:#635c7c;cursor:pointer}.integration-ids p{font-size:12px;line-height:1.7}
+.integration-step .row{margin-top:14px}.integration-step small{color:#777186;font-size:11px}
+.integration-note{padding:16px 24px;background:#f7f7fb;border-top:1px solid #eeeaf6;color:#777186;font-size:11px;line-height:1.8}
+@media(max-width:520px){.integration-heading,.integration-step{padding:18px 14px}.integration-heading{align-items:flex-start;flex-direction:column}.integration-expiry,.integration-note{padding:12px 14px}.endpoint-control{flex-wrap:wrap}.endpoint-control input{flex-basis:100%;width:100%}.integration-heading h3{font-size:18px}}
