@@ -1105,9 +1105,12 @@ def fixed_access(key: str, service_id: str, path: str, request: Request):
             {'name':'서비스 계약 / 국가 정책','status':'pass'}]
     audit_context(details={**AUDIT.get().get('details',{}),'stages':stages})
     if relative=='ping':
-        return {'status':'ready','participant_id':session['participant_id'],
-                'expires_at':min(session['expires'],contract['expires']),
-                'lastPrivateInteractionTime':datetime.now(timezone(timedelta(hours=9))).strftime('%Y%m%dT%H%M%S%z')}
+        kst = timezone(timedelta(hours=9))
+        return {
+            'status': 'ready',
+            'expires_at': datetime.fromtimestamp(min(session['expires'], contract['expires']), kst).strftime('%Y%m%dT%H%M%S%z'),
+            'lastPrivateInteractionTime': datetime.now(kst).strftime('%Y%m%dT%H%M%S%z'),
+        }
     validate_data_url(service['data_url'])
     if service['data_url']=='demo://weather':
         if relative not in DEMO_PATHS: raise HTTPException(404,'허용되지 않은 데이터 경로')

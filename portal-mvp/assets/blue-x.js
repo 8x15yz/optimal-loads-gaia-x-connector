@@ -41,7 +41,7 @@ function integrationPanel(s,c,a,url){
  const key=state.access_path.split('/').filter(Boolean).at(-1), expiry=Math.min(a.expires,c.expires);
  return `<div class="integration-panel">
  <div class="integration-heading"><div><span class="eyebrow">WEB ECDIS / API</span><h3>${t('ix_title')}</h3></div><span class="badge pass">${t('ix_contract')}</span></div>
- <div class="integration-expiry"><span>${t('ix_until')}</span><strong>${esc(dt(expiry))}</strong></div>
+ <div class="integration-expiry"><span>${t('ix_until')}</span><strong>${esc(dt(expiry))}</strong><small class="expiry-guidance">${t('ix_renew')}</small></div>
  <section class="integration-step"><div class="step-heading"><span class="step-number">01</span><div><h3>${t('ix_base')}</h3><p>${t('ix_base_hint')}</p></div></div>
  ${endpointField(s.id,t('ix_base'),url)}
  <details class="integration-ids"><summary>${t('ix_ids')}</summary>${endpointField('sid-'+s.id,t('ix_service'),s.id,false)}${endpointField('key-'+s.id,t('ix_key'),key)}<p class="muted">${t('ix_key_hint')}</p></details></section>

@@ -23,3 +23,5 @@ html[lang=en] .stat-number small{display:none}
 .integration-step .row{margin-top:14px}.integration-step small{color:#777186;font-size:11px}
 .integration-note{padding:16px 24px;background:#f7f7fb;border-top:1px solid #eeeaf6;color:#777186;font-size:11px;line-height:1.8}
 @media(max-width:520px){.integration-heading,.integration-step{padding:18px 14px}.integration-heading{align-items:flex-start;flex-direction:column}.integration-expiry,.integration-note{padding:12px 14px}.endpoint-control{flex-wrap:wrap}.endpoint-control input{flex-basis:100%;width:100%}.integration-heading h3{font-size:18px}}
+
+.expiry-guidance{flex-basis:100%;font-size:11px;line-height:1.7;color:#777186}

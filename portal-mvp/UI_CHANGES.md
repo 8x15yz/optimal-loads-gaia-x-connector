@@ -1,3 +1,12 @@
+## Ping 응답 형식 변경
+
+- Ping 응답의 participant_id 제외. 내부 참여자 식별 및 다른 API 응답은 유지.
+- Ping의 expires_at을 Unix 초에서 한국 시간 YYYYMMDDTHHMMSS+0900 문자열로 변경. lastPrivateInteractionTime과 같은 형식.
+- 예: 1789722419.5180044 → 20260918T180659+0900.
+- Web ECDIS에서는 expires_at * 1000 방식 대신 해당 문자열 형식에 맞게 처리해야 함.
+- 서비스 이용 화면에 만료 후 참여 세션 재연결 및 서비스 재계약 안내 추가.
+- 내부 만료 계산 및 다른 API의 expires_at은 변경하지 않음.
+
 # Blue-X v0.9.0 — 서비스 연계 접속 정보
 
 - 서비스 이용의 활성 계약에 서비스 접근 기본 URL, Ping URL, 허용된 데이터 경로별 URL을 표시함. 각각 표시/숨김 및 복사 기능 제공.
