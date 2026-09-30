@@ -1,4 +1,5 @@
 """Offline SHACL subset for this portal, not the complete official shape suite."""
+from verification_timing import timed, profiled, span, current_trace, activate
 import copy
 import hashlib
 import json
@@ -15,6 +16,7 @@ SH = Namespace('http://www.w3.org/ns/shacl#')
 S = Namespace('urn:portal:shape:')
 
 @lru_cache(maxsize=1)
+@timed('schema_assets_load', None)
 def assets():
     manifest=json.loads((ROOT/'manifest.json').read_text())
     for name,digest in manifest['sha256'].items():
@@ -34,15 +36,20 @@ def inline_contexts(obj, contexts):
     if isinstance(obj,list): return [inline_contexts(v,contexts) for v in obj]
     return obj
 
+@timed('schema_total', 0)
 def schema_check(payload,typ):
     try:
-        data=inline_contexts(payload,assets())
+        with span('jsonld_context_prepare', ''):
+            data=inline_contexts(payload,assets())
         if typ=='VerifiablePresentation':
             return result('shacl','포털 SHACL','not_applicable','허용 context 확인; VP는 envelope 구조로 별도 검사',False)
-        graph=Graph().parse(data=json.dumps(data),format='json-ld')
-        shapes=Graph().parse(ROOT/'loire-demo-v2.ttl',format='turtle')
-        shapes.add((S[typ.split(':')[-1]],SH.targetNode,URIRef(payload['id'])))
-        conforms,report,_=validate(graph,shacl_graph=shapes,inference='none',advanced=False,js=False,do_owl_imports=False)
+        with span('jsonld_graph', ''):
+            graph=Graph().parse(data=json.dumps(data),format='json-ld')
+        with span('shacl_shapes_load', ''):
+            shapes=Graph().parse(ROOT/'loire-demo-v2.ttl',format='turtle')
+            shapes.add((S[typ.split(':')[-1]],SH.targetNode,URIRef(payload['id'])))
+        with span('shacl_validate', ''):
+            conforms,report,_=validate(graph,shacl_graph=shapes,inference='none',advanced=False,js=False,do_owl_imports=False)
         messages=[str(m) for m in report.objects(None,SH.resultMessage)]
         return result('shacl','포털 SHACL','pass' if conforms else 'fail','고정 context와 포털 자체 SHACL 부분집합 통과 (공식 전체 아님)' if conforms else '; '.join(messages)[:500])
     except Exception as e:

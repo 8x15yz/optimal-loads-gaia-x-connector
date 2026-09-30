@@ -1,4 +1,5 @@
 """JWT/VC consistency and supported signed status-list validation."""
+from verification_timing import timed, profiled, span, current_trace, activate
 import base64
 import gzip
 import io
@@ -14,6 +15,7 @@ LEGACY={'did:web:registrationnumber.notary.lab.gaia-x.eu:v2','did:web:compliance
 def is_iri(value):
     return isinstance(value,str) and bool(re.fullmatch(r'[A-Za-z][A-Za-z0-9+.-]*:[^\s]+',value))
 
+@timed('jwt_header', 1)
 def header_check(h,p,typ):
     pair=('vp+jwt','vp') if typ=='VerifiablePresentation' else ('vc+jwt','vc')
     pairs={pair}
@@ -24,6 +26,7 @@ def header_check(h,p,typ):
         'vc' not in p and 'vp' not in p)
     return result('jwt_header','JWT 헤더 일관성','pass' if ok else 'fail','iss ↔ issuer, typ/cty 조합, 허용 알고리즘·헤더 확장 검사')
 
+@timed('validity', 1)
 def time_checks(h,p,now,require_end=True):
     from credentials import date_value
     rows,ends=[],[]
@@ -62,6 +65,7 @@ def time_checks(h,p,now,require_end=True):
             rows.append(result('legacy_time','Loire 헤더 시간','fail','허용하지 않는 헤더 시간 형식'))
     return rows,ends
 
+@timed('credential_status', 0)
 def status_checks(p,doc,policy,now,fetcher,cache):
     from credentials import unpack,signature
     if 'credentialStatus' not in p:
@@ -80,7 +84,8 @@ def status_checks(p,doc,policy,now,fetcher,cache):
             idx=int(idx); url=entry.get('statusListCredential'); issuer=p.get('issuer')
             if not isinstance(url,str) or policy.get('status_list_urls',{}).get(url)!=issuer:
                 rows.append(result('vc_status','VC 폐기·정지','unknown','관리자가 신뢰 URL·발급자를 등록하지 않은 status list')); continue
-            if url not in cache: cache[url]=fetcher(url,policy['status_list_urls'],512_000)
+            with span('status_list_material', issuer, cache_hit=url in cache):
+                if url not in cache: cache[url]=fetcher(url,policy['status_list_urls'],512_000)
             token=cache[url].decode('utf-8').strip()
             if token.startswith('{'):
                 from credentials import strict_json

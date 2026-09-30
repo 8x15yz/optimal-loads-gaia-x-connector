@@ -1,4 +1,5 @@
 """Loire demo import profile. Decoding, cryptographic checks and trust are separate."""
+from verification_timing import timed, profiled, span, current_trace, activate
 import base64
 import hashlib
 import io
@@ -38,6 +39,7 @@ def strict_json(data):
     return json.loads(data, object_pairs_hook=unique,
                       parse_constant=lambda x: (_ for _ in ()).throw(ValueError('유효하지 않은 JSON 숫자')))
 
+@timed('jwt_decode', None)
 def unpack(token):
     if not isinstance(token, str) or len(token) > MAX_FILE:
         raise ValueError('JWT 크기 또는 형식 오류')
@@ -63,6 +65,7 @@ def kind(payload):
         return 'VerifiablePresentation'
     return matches[0] if matches else 'Unknown'
 
+@timed('upload_read', None)
 def read_uploads(files):
     """No ZIP extraction onto disk; cap members, size and supported extension."""
     found = []
@@ -103,6 +106,7 @@ def did_url(did):
     suffix = '/'.join(parts[1:])
     return f'https://{host}/' + (suffix + '/did.json' if suffix else '.well-known/did.json')
 
+@timed('did_fetch', 0)
 def fetch_document(did):
     url = did_url(did)
     data = remote_bytes(url, [url], 256_000)
@@ -111,6 +115,7 @@ def fetch_document(did):
         raise ValueError('DID 문서 id 불일치')
     return doc
 
+@timed('jwt_signature', 1)
 def signature(header, payload, token, doc):
     if isinstance(doc, Exception):
         return 'unknown', '공개키 조회 실패: ' + type(doc).__name__
@@ -192,6 +197,7 @@ def ref_digest(ref):
     """해시 키 변천: gx:digestSRI(~09/16) → digestSRI(W3C VC v2, 09/17~)."""
     return ref.get('gx:digestSRI') or ref.get('digestSRI')
 
+@profiled
 def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remote_bytes, policy=None, now=None):
     policy = load_policy() if policy is None else policy
     if policy.get('profile')!=PROFILE: raise ValueError('검증 정책 프로필 불일치')
@@ -225,16 +231,20 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
                 if not isinstance(data, str) or not data.startswith('data:application/vc+jwt,'):
                     raise ValueError('VP 내부 data URL 형식 오류')
                 add(f'{name} / VC {i+1}', data.split(',', 1)[1], depth+1)
-    for name, token in named_tokens:
-        add(name, token)
+    with span('jwt_and_vp_expand', ''):
+        for name, token in named_tokens:
+            add(name, token)
     issuers = {d['payload'].get('issuer') for d in docs if isinstance(d['payload'].get('issuer'), str)}
+    trace = current_trace()
     def resolve(did):
-        try:
-            return did, resolver(did)
-        except Exception as e:
-            return did, e
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        keys = dict(pool.map(resolve, issuers & TRUSTED.keys()))
+        with activate(trace), span('did_resolve', did):
+            try:
+                return did, resolver(did)
+            except Exception as e:
+                return did, e
+    with span('did_lookup_parallel', ''):
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            keys = dict(pool.map(resolve, issuers & TRUSTED.keys()))
     checks, limits, cert_cache, status_cache = [], [], {}, {}
     def check(scope, name, status, detail, required=True, code=None):
         checks.append(dict(scope=scope,**result(code or name,name,status,detail,required)))
@@ -242,112 +252,118 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
         checks.extend(dict(scope=scope,**r) for r in rows)
     now = now or datetime.now(timezone.utc)
     for d in docs:
-        p,h,typ,scope=d['payload'],d['header'],d['kind'],d['file']
-        issuer=p.get('issuer')
-        doc=keys.get(issuer) if isinstance(issuer,str) else None
-        sig,detail=signature(h,p,d['token'],doc)
-        check(scope,'서명',sig,detail,code='signature')
-        trusted=isinstance(issuer,str) and typ in TRUSTED.get(issuer,set())
-        check(scope,'발급자','pass' if trusted else 'fail','명시된 데모 발급자·유형 대조 (공식 신뢰목록 아님)',code='issuer')
-        append_rows(scope,[header_check(h,p,typ)])
-        ctx=p.get('@context',[])
-        if isinstance(ctx,str): ctx=[ctx]
-        types=p.get('type',[])
-        if isinstance(types,str): types=[types]
-        shape=isinstance(ctx,list) and 'https://www.w3.org/ns/credentials/v2' in ctx and trusted
-        if typ!='VerifiablePresentation':
-            shape=shape and 'VerifiableCredential' in types and isinstance(p.get('credentialSubject'),dict) and is_iri(p.get('id')) and is_iri(p.get('credentialSubject',{}).get('id'))
-        check(scope,'기본 구조','pass' if shape else 'fail','VC/VP 유형·context·식별자·subject 구조 확인',code='structure')
-        tr,te=time_checks(h,p,now); append_rows(scope,tr); limits.extend(te)
-        if typ=='VerifiablePresentation':
-            check(scope,'VP 식별자','pass' if is_iri(p.get('id')) else 'warning','샘플 VP는 id가 없을 수 있음; 라이브 인증용 VP로 취급하지 않음',False,'vp_id')
-            check(scope,'소유자 인증','not_applicable','파일 가져오기에는 challenge/audience 기반 소유자 인증 미적용',False,'holder_binding')
-        elif isinstance(p.get('credentialSubject'),dict):
-            st=p['credentialSubject'].get('type')
-            if st is None:
-                check(scope,'subject 유형','warning','샘플에는 subject.type이 없음; 공식 ICAM 정합성은 별도 보완 필요',False,'subject_type')
+        with span('document_total', d['file']):
+            p,h,typ,scope=d['payload'],d['header'],d['kind'],d['file']
+            issuer=p.get('issuer')
+            doc=keys.get(issuer) if isinstance(issuer,str) else None
+            sig,detail=signature(h,p,d['token'],doc)
+            check(scope,'서명',sig,detail,code='signature')
+            with span('issuer_and_structure', scope):
+                trusted=isinstance(issuer,str) and typ in TRUSTED.get(issuer,set())
+                check(scope,'발급자','pass' if trusted else 'fail','명시된 데모 발급자·유형 대조 (공식 신뢰목록 아님)',code='issuer')
+                append_rows(scope,[header_check(h,p,typ)])
+                ctx=p.get('@context',[])
+                if isinstance(ctx,str): ctx=[ctx]
+                types=p.get('type',[])
+                if isinstance(types,str): types=[types]
+                shape=isinstance(ctx,list) and 'https://www.w3.org/ns/credentials/v2' in ctx and trusted
+                if typ!='VerifiablePresentation':
+                    shape=shape and 'VerifiableCredential' in types and isinstance(p.get('credentialSubject'),dict) and is_iri(p.get('id')) and is_iri(p.get('credentialSubject',{}).get('id'))
+                check(scope,'기본 구조','pass' if shape else 'fail','VC/VP 유형·context·식별자·subject 구조 확인',code='structure')
+            tr,te=time_checks(h,p,now); append_rows(scope,tr); limits.extend(te)
+            if typ=='VerifiablePresentation':
+                check(scope,'VP 식별자','pass' if is_iri(p.get('id')) else 'warning','샘플 VP는 id가 없을 수 있음; 라이브 인증용 VP로 취급하지 않음',False,'vp_id')
+                check(scope,'소유자 인증','not_applicable','파일 가져오기에는 challenge/audience 기반 소유자 인증 미적용',False,'holder_binding')
+            elif isinstance(p.get('credentialSubject'),dict):
+                st=p['credentialSubject'].get('type')
+                if st is None:
+                    check(scope,'subject 유형','warning','샘플에는 subject.type이 없음; 공식 ICAM 정합성은 별도 보완 필요',False,'subject_type')
+                else:
+                    st=st if isinstance(st,list) else [st]
+                    check(scope,'subject 유형','pass' if typ in st else 'fail','명시된 subject.type과 이 프로필 유형 대조',True,'subject_type')
+            if sig=='pass' and shape:
+                append_rows(scope,[schema_check(p,typ)])
+                if typ!='VerifiablePresentation':
+                    sr,se=status_checks(p,doc,policy,now,resource_fetcher,status_cache)
+                    append_rows(scope,sr); limits.extend(se)
+                cache_key=(issuer,h['kid'])
+                if cache_key in cert_cache:
+                    with span('certificate_cache', scope, cache_hit=True):
+                        pass
+                if cache_key not in cert_cache:
+                    method=next(m for m in doc['verificationMethod'] if m.get('id')==h['kid'])
+                    cert_cache[cache_key]=certificate_checks(method,issuer,policy,now,resource_fetcher)
+                cr,ce=cert_cache[cache_key]; append_rows(scope,cr)
+                if ce: limits.append(ce)
             else:
-                st=st if isinstance(st,list) else [st]
-                check(scope,'subject 유형','pass' if typ in st else 'fail','명시된 subject.type과 이 프로필 유형 대조',True,'subject_type')
-        if sig=='pass' and shape:
-            append_rows(scope,[schema_check(p,typ)])
-            if typ!='VerifiablePresentation':
-                sr,se=status_checks(p,doc,policy,now,resource_fetcher,status_cache)
-                append_rows(scope,sr); limits.extend(se)
-            cache_key=(issuer,h['kid'])
-            if cache_key not in cert_cache:
-                method=next(m for m in doc['verificationMethod'] if m.get('id')==h['kid'])
-                cert_cache[cache_key]=certificate_checks(method,issuer,policy,now,resource_fetcher)
-            cr,ce=cert_cache[cache_key]; append_rows(scope,cr)
-            if ce: limits.append(ce)
-        else:
-            check(scope,'후속 검사','unknown','서명·구조 검사 실패로 스키마·인증서·상태 조회를 진행하지 않음',True,'dependent_checks')
-    check('세트','공식 SHACL','unknown','포털 자체 부분집합만 적용; 공식 버전별 전체 SHACL 미구현',False,'official_shacl')
-    groups = {t: [d for d in docs if d['kind'] == t] for t in REQUIRED}
-    complete = (all(len(v) == 1 for v in groups.values()) and
-                all(isinstance(d['payload'].get('credentialSubject'), dict) for ds in groups.values() for d in ds))
-    check('세트', '구성', 'pass' if complete else 'fail',
-          '각 유형의 VC 1개씩 필요: LegalPerson / Issuer / LeiCode / LabelCredential')
-    if complete:
-        lp = groups['gx:LegalPerson'][0]['payload']
-        lrn = groups['gx:LeiCode'][0]['payload']
-        cp = groups['gx:LabelCredential'][0]['payload']['credentialSubject']
-        ref = lp['credentialSubject'].get('gx:registrationNumber', {})
-        linked = isinstance(ref, dict) and ref.get('id') == lrn['credentialSubject'].get('id') and bool(ref.get('id'))
-        check('세트', '등록번호 연결', 'pass' if linked else 'fail', 'LegalPerson의 등록번호 참조 ↔ LeiCode의 subject.id')
-        refs = cp.get('gx:compliantCredentials', [])
-        ref_ids = set()
-        hash_ok = isinstance(refs, list) and len(refs) == 3
-        for ref in refs if isinstance(refs, list) else []:
-            if not isinstance(ref, dict):
-                hash_ok = False; continue
-            target = next((d for d in docs if d['payload'].get('id') == ref.get('id') and d['kind'] != 'gx:LabelCredential'), None)
-            ref_type = ref_credential_type(ref)
-            if not target or ref.get('id') in ref_ids or ref_type != target['kind']:
-                hash_ok = False; continue
-            ref_ids.add(ref['id'])
-            sri = ref_digest(ref)
-            raw = hashlib.sha256(rfc8785.dumps(target['payload'])).digest()
-            accepted = {'sha256-' + raw.hex(), 'sha256-' + base64.b64encode(raw).decode()}
-            hash_ok = hash_ok and isinstance(sri, str) and sri in accepted
-        expected = {groups[t][0]['payload']['id'] for t in REQUIRED - {'gx:LabelCredential'}}
-        check('세트', 'Compliance ID·해시', 'pass' if hash_ok and ref_ids == expected else 'fail',
-              'VC 본문 RFC 8785(JCS) → SHA-256 hex; 참조 대상 3개와 대조')
-        profile = compliance_profile(policy)
-        label, rules = cp.get('gx:labelLevel'), cp.get('gx:rulesVersion')
-        rules_present = isinstance(rules, str) and bool(rules.strip())
-        check('세트', '검사 프로필', 'pass' if label in profile['label_levels'] and rules_present else 'fail',
-              f'labelLevel {"/".join(profile["label_levels"])} 및 rulesVersion 존재 확인; 제출값 {label} / {rules}')
-        known = rules in profile['known_rules_versions']
-        check('세트', '규칙 버전', 'pass' if known else 'warning',
-              f'확인된 버전({", ".join(profile["known_rules_versions"]) or "없음"})' + ('과 일치' if known else f'에 없는 {rules}; Lab 버전 변경으로 보고 연결은 허용'),
-              False, 'rules_version')
-        tc = groups['gx:Issuer'][0]['payload']
-        lp_doc,tc_doc = groups['gx:LegalPerson'][0],groups['gx:Issuer'][0]
-        linked_issuer=lp.get('issuer')==tc.get('issuer') and lp_doc['header'].get('kid')==tc_doc['header'].get('kid')
-        check('세트','약관 서명자 연결','pass' if linked_issuer else 'fail','LegalPerson / 약관 VC 발급자·서명 키 비교',code='terms_issuer')
-        terms=tc['credentialSubject'].get('gaiaxTermsAndConditions')
-        check('세트','약관 해시','pass' if isinstance(terms,str) and terms in policy.get('accepted_terms_hashes',[]) else 'fail','운영자가 고정한 샘플 약관 해시와 비교; 법적 대표 권한 증명이 아님',code='terms_hash')
-        criteria=cp.get('gx:validatedCriteria',[])
-        criteria_ok=(isinstance(criteria,list) and all(isinstance(x,str) for x in criteria) and
-                     all(any(x.startswith(CRITERIA_BASE) and x.endswith('/'+sfx) for x in criteria) for sfx in profile['required_criteria_suffixes']))
-        check('세트','Compliance 기준','pass' if criteria_ok else 'fail',
-              f'서명된 validatedCriteria에 필수 기준({", ".join(profile["required_criteria_suffixes"])}) 포함 여부; 문서 버전 경로는 무관',code='criteria')
-        lei=lrn['credentialSubject'].get('schema:leiCode','')
-        valid_lei=isinstance(lei,str) and bool(re.fullmatch(r'[A-Z0-9]{18}[0-9]{2}',lei))
-        if valid_lei:
-            digits=''.join(str(ord(c)-55) if c.isalpha() else c for c in lei)
-            valid_lei=int(digits)%97==1
-        check('세트','LEI 체크섬','pass' if valid_lei else 'fail','LEI 형식·MOD 97 검사; GLEIF 현재 등록 상태·회사 신원 조회는 별도',code='lei_checksum')
-    summary = {}
-    if len(groups['gx:LegalPerson']) == 1:
-        subject = groups['gx:LegalPerson'][0]['payload'].get('credentialSubject', {})
-        address = subject.get('gx:legalAddress', {})
-        summary = {'name': subject.get('schema:name'), 'country': address.get('gx:countryCode') if isinstance(address, dict) else None,
-                   'subject_id': subject.get('id')}
-    check('세트', '데모 조직 속성', 'pass' if isinstance(summary.get('name'), str) and summary['name'] and
-          isinstance(summary.get('country'), str) and re.fullmatch('[A-Z]{2}', summary['country']) else 'fail',
-          '조직명과 ISO 2자리 국가 코드 필요')
+                check(scope,'후속 검사','unknown','서명·구조 검사 실패로 스키마·인증서·상태 조회를 진행하지 않음',True,'dependent_checks')
+    with span('set_cross_checks', ''):
+        check('세트','공식 SHACL','unknown','포털 자체 부분집합만 적용; 공식 버전별 전체 SHACL 미구현',False,'official_shacl')
+        groups = {t: [d for d in docs if d['kind'] == t] for t in REQUIRED}
+        complete = (all(len(v) == 1 for v in groups.values()) and
+                    all(isinstance(d['payload'].get('credentialSubject'), dict) for ds in groups.values() for d in ds))
+        check('세트', '구성', 'pass' if complete else 'fail',
+              '각 유형의 VC 1개씩 필요: LegalPerson / Issuer / LeiCode / LabelCredential')
+        if complete:
+            lp = groups['gx:LegalPerson'][0]['payload']
+            lrn = groups['gx:LeiCode'][0]['payload']
+            cp = groups['gx:LabelCredential'][0]['payload']['credentialSubject']
+            ref = lp['credentialSubject'].get('gx:registrationNumber', {})
+            linked = isinstance(ref, dict) and ref.get('id') == lrn['credentialSubject'].get('id') and bool(ref.get('id'))
+            check('세트', '등록번호 연결', 'pass' if linked else 'fail', 'LegalPerson의 등록번호 참조 ↔ LeiCode의 subject.id')
+            refs = cp.get('gx:compliantCredentials', [])
+            ref_ids = set()
+            hash_ok = isinstance(refs, list) and len(refs) == 3
+            for ref in refs if isinstance(refs, list) else []:
+                if not isinstance(ref, dict):
+                    hash_ok = False; continue
+                target = next((d for d in docs if d['payload'].get('id') == ref.get('id') and d['kind'] != 'gx:LabelCredential'), None)
+                ref_type = ref_credential_type(ref)
+                if not target or ref.get('id') in ref_ids or ref_type != target['kind']:
+                    hash_ok = False; continue
+                ref_ids.add(ref['id'])
+                sri = ref_digest(ref)
+                raw = hashlib.sha256(rfc8785.dumps(target['payload'])).digest()
+                accepted = {'sha256-' + raw.hex(), 'sha256-' + base64.b64encode(raw).decode()}
+                hash_ok = hash_ok and isinstance(sri, str) and sri in accepted
+            expected = {groups[t][0]['payload']['id'] for t in REQUIRED - {'gx:LabelCredential'}}
+            check('세트', 'Compliance ID·해시', 'pass' if hash_ok and ref_ids == expected else 'fail',
+                  'VC 본문 RFC 8785(JCS) → SHA-256 hex; 참조 대상 3개와 대조')
+            profile = compliance_profile(policy)
+            label, rules = cp.get('gx:labelLevel'), cp.get('gx:rulesVersion')
+            rules_present = isinstance(rules, str) and bool(rules.strip())
+            check('세트', '검사 프로필', 'pass' if label in profile['label_levels'] and rules_present else 'fail',
+                  f'labelLevel {"/".join(profile["label_levels"])} 및 rulesVersion 존재 확인; 제출값 {label} / {rules}')
+            known = rules in profile['known_rules_versions']
+            check('세트', '규칙 버전', 'pass' if known else 'warning',
+                  f'확인된 버전({", ".join(profile["known_rules_versions"]) or "없음"})' + ('과 일치' if known else f'에 없는 {rules}; Lab 버전 변경으로 보고 연결은 허용'),
+                  False, 'rules_version')
+            tc = groups['gx:Issuer'][0]['payload']
+            lp_doc,tc_doc = groups['gx:LegalPerson'][0],groups['gx:Issuer'][0]
+            linked_issuer=lp.get('issuer')==tc.get('issuer') and lp_doc['header'].get('kid')==tc_doc['header'].get('kid')
+            check('세트','약관 서명자 연결','pass' if linked_issuer else 'fail','LegalPerson / 약관 VC 발급자·서명 키 비교',code='terms_issuer')
+            terms=tc['credentialSubject'].get('gaiaxTermsAndConditions')
+            check('세트','약관 해시','pass' if isinstance(terms,str) and terms in policy.get('accepted_terms_hashes',[]) else 'fail','운영자가 고정한 샘플 약관 해시와 비교; 법적 대표 권한 증명이 아님',code='terms_hash')
+            criteria=cp.get('gx:validatedCriteria',[])
+            criteria_ok=(isinstance(criteria,list) and all(isinstance(x,str) for x in criteria) and
+                         all(any(x.startswith(CRITERIA_BASE) and x.endswith('/'+sfx) for x in criteria) for sfx in profile['required_criteria_suffixes']))
+            check('세트','Compliance 기준','pass' if criteria_ok else 'fail',
+                  f'서명된 validatedCriteria에 필수 기준({", ".join(profile["required_criteria_suffixes"])}) 포함 여부; 문서 버전 경로는 무관',code='criteria')
+            lei=lrn['credentialSubject'].get('schema:leiCode','')
+            valid_lei=isinstance(lei,str) and bool(re.fullmatch(r'[A-Z0-9]{18}[0-9]{2}',lei))
+            if valid_lei:
+                digits=''.join(str(ord(c)-55) if c.isalpha() else c for c in lei)
+                valid_lei=int(digits)%97==1
+            check('세트','LEI 체크섬','pass' if valid_lei else 'fail','LEI 형식·MOD 97 검사; GLEIF 현재 등록 상태·회사 신원 조회는 별도',code='lei_checksum')
+        summary = {}
+        if len(groups['gx:LegalPerson']) == 1:
+            subject = groups['gx:LegalPerson'][0]['payload'].get('credentialSubject', {})
+            address = subject.get('gx:legalAddress', {})
+            summary = {'name': subject.get('schema:name'), 'country': address.get('gx:countryCode') if isinstance(address, dict) else None,
+                       'subject_id': subject.get('id')}
+        check('세트', '데모 조직 속성', 'pass' if isinstance(summary.get('name'), str) and summary['name'] and
+              isinstance(summary.get('country'), str) and re.fullmatch('[A-Z]{2}', summary['country']) else 'fail',
+              '조직명과 ISO 2자리 국가 코드 필요')
     blocking=[c for c in checks if c['required_for_demo'] and c['status']!='pass']
     counts={status:sum(c['status']==status for c in checks) for status in ('pass','fail','unknown','warning','not_applicable')}
     return {'profile':PROFILE,'eligible_for_demo':not blocking,'production_compliance':False,
