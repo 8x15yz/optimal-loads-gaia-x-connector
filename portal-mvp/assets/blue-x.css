@@ -33,3 +33,17 @@ html[lang=en] .stat-number small{display:none}
 .card.empty-cta:hover{border-color:#c4bfff;background:var(--soft)}
 .card.empty-cta:focus-visible{outline:3px solid #a5a0fc;outline-offset:3px}
 .card.empty-cta h3{color:var(--primary)}
+
+/* Integration steps 02/03: launcher buttons + modal */
+.ix-launchers{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button.ix-launch{display:flex;align-items:flex-start;gap:12px;text-align:left;padding:16px;border-radius:12px;border:1px solid #e2dff3;background:#fbfaff;font-weight:400}
+button.ix-launch:hover{border-color:#c4bfff;background:var(--soft)}
+button.ix-launch b{display:block;font-size:14px;margin-bottom:4px}
+button.ix-launch small{display:block;font-size:12px;line-height:1.6}
+.ix-dialog{max-width:720px}
+.ix-dialog h2{display:flex;align-items:center;gap:10px;margin:6px 0 0}
+.ix-dialog .ix-test{border-top:1px solid var(--line);margin-top:18px;padding-top:6px}
+.ix-dialog .ix-test h3{margin:12px 0 0}
+.ix-dialog .ix-test select,.ix-dialog .ix-test input{width:100%}
+.ix-result{margin-top:20px}.ix-result pre{margin-top:8px;max-height:280px}
+@media(max-width:520px){.ix-launchers{grid-template-columns:1fr}.ix-dialog{padding:20px}}
