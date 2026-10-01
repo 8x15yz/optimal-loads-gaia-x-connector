@@ -27,3 +27,9 @@ html[lang=en] .stat-number small{display:none}
 .expiry-guidance{flex-basis:100%;font-size:11px;line-height:1.7;color:#777186}
 
 .session-settings{border-top:3px solid #7660d4}.session-settings h2{margin:5px 0 0}.session-settings .notice-policy{background:#f5f2ff;color:#675d84;padding:13px 16px;border-radius:10px;font-size:12px;line-height:1.8;margin-top:16px}.session-settings small{display:block;margin-top:9px}
+
+/* Empty-state CTA: click to reveal the new-service form. */
+.card.empty-cta{cursor:pointer;transition:border-color .15s,background-color .15s,box-shadow .15s}
+.card.empty-cta:hover{border-color:#c4bfff;background:var(--soft)}
+.card.empty-cta:focus-visible{outline:3px solid #a5a0fc;outline-offset:3px}
+.card.empty-cta h3{color:var(--primary)}

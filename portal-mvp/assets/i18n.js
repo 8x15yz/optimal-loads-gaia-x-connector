@@ -188,10 +188,10 @@ const UI_MESSAGES = {
   },
   "m020": {
     "ko": [
-      "<section class=\"card empty empty-cta\" data-open-service-form role=\"button\" tabindex=\"0\"><h3>첫 서비스를 등록해보세요</h3><p>다른 참여자가 계약하고 이용할 데이터 서비스를 제공할 수 있습니다.</p></section>"
+      "<section class=\"card empty empty-cta\" data-open-service-form aria-controls=\"service-form\" role=\"button\" tabindex=\"0\"><h3>첫 서비스를 등록해보세요</h3><p>다른 참여자가 계약하고 이용할 데이터 서비스를 제공할 수 있습니다.</p></section>"
     ],
     "en": [
-      "<section class=\"card empty empty-cta\" data-open-service-form role=\"button\" tabindex=\"0\"><h3>Register your first service</h3><p>Publish a data service that other participants can contract and use.</p></section>"
+      "<section class=\"card empty empty-cta\" data-open-service-form aria-controls=\"service-form\" role=\"button\" tabindex=\"0\"><h3>Register your first service</h3><p>Publish a data service that other participants can contract and use.</p></section>"
     ]
   },
   "m021": {
