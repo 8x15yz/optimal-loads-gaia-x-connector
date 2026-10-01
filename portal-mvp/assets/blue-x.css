@@ -47,3 +47,4 @@ button.ix-launch small{display:block;font-size:12px;line-height:1.6}
 .ix-dialog .ix-test select,.ix-dialog .ix-test input{width:100%}
 .ix-result{margin-top:20px}.ix-result pre{margin-top:8px;max-height:280px}
 @media(max-width:520px){.ix-launchers{grid-template-columns:1fr}.ix-dialog{padding:20px}}
+.pathchip .pathsample{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:var(--muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
