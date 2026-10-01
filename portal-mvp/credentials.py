@@ -6,7 +6,8 @@ import io
 import json
 import re
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlsplit
 
@@ -242,61 +243,85 @@ def inspect_set(named_tokens, resolver=fetch_document, *, resource_fetcher=remot
                 return did, resolver(did)
             except Exception as e:
                 return did, e
-    with span('did_lookup_parallel', ''):
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            keys = dict(pool.map(resolve, issuers & TRUSTED.keys()))
     checks, limits, cert_cache, status_cache = [], [], {}, {}
     def check(scope, name, status, detail, required=True, code=None):
         checks.append(dict(scope=scope,**result(code or name,name,status,detail,required)))
     def append_rows(scope, rows):
         checks.extend(dict(scope=scope,**r) for r in rows)
     now = now or datetime.now(timezone.utc)
-    for d in docs:
-        with span('document_total', d['file']):
-            p,h,typ,scope=d['payload'],d['header'],d['kind'],d['file']
-            issuer=p.get('issuer')
-            doc=keys.get(issuer) if isinstance(issuer,str) else None
-            sig,detail=signature(h,p,d['token'],doc)
-            check(scope,'서명',sig,detail,code='signature')
-            with span('issuer_and_structure', scope):
-                trusted=isinstance(issuer,str) and typ in TRUSTED.get(issuer,set())
-                check(scope,'발급자','pass' if trusted else 'fail','명시된 데모 발급자·유형 대조 (공식 신뢰목록 아님)',code='issuer')
-                append_rows(scope,[header_check(h,p,typ)])
-                ctx=p.get('@context',[])
-                if isinstance(ctx,str): ctx=[ctx]
-                types=p.get('type',[])
-                if isinstance(types,str): types=[types]
-                shape=isinstance(ctx,list) and 'https://www.w3.org/ns/credentials/v2' in ctx and trusted
-                if typ!='VerifiablePresentation':
-                    shape=shape and 'VerifiableCredential' in types and isinstance(p.get('credentialSubject'),dict) and is_iri(p.get('id')) and is_iri(p.get('credentialSubject',{}).get('id'))
-                check(scope,'기본 구조','pass' if shape else 'fail','VC/VP 유형·context·식별자·subject 구조 확인',code='structure')
-            tr,te=time_checks(h,p,now); append_rows(scope,tr); limits.extend(te)
-            if typ=='VerifiablePresentation':
-                check(scope,'VP 식별자','pass' if is_iri(p.get('id')) else 'warning','샘플 VP는 id가 없을 수 있음; 라이브 인증용 VP로 취급하지 않음',False,'vp_id')
-                check(scope,'소유자 인증','not_applicable','파일 가져오기에는 challenge/audience 기반 소유자 인증 미적용',False,'holder_binding')
-            elif isinstance(p.get('credentialSubject'),dict):
-                st=p['credentialSubject'].get('type')
-                if st is None:
-                    check(scope,'subject 유형','warning','샘플에는 subject.type이 없음; 공식 ICAM 정합성은 별도 보완 필요',False,'subject_type')
+    pending_cert_rows = []
+    document_checks = {}
+    # Yield documents for whichever issuer finishes first; output remains in input order.
+    def ready_documents(pool):
+        futures = [pool.submit(copy_context().run, resolve, did)
+                   for did in issuers & TRUSTED.keys()]
+        for index,d in enumerate(docs):
+            issuer = d['payload'].get('issuer')
+            if not isinstance(issuer,str) or issuer not in TRUSTED:
+                yield index,d,None
+        for future in as_completed(futures):
+            did,doc = future.result()
+            for index,d in enumerate(docs):
+                if d['payload'].get('issuer') == did:
+                    yield index,d,doc
+
+    with span('did_certificate_pipeline', ''), ThreadPoolExecutor(max_workers=3) as did_pool, ThreadPoolExecutor(max_workers=3) as cert_pool:
+        for index,d,doc in ready_documents(did_pool):
+            checks = []
+            document_checks[index] = checks
+            with span('document_total', d['file']):
+                p,h,typ,scope=d['payload'],d['header'],d['kind'],d['file']
+                issuer=p.get('issuer')
+                sig,detail=signature(h,p,d['token'],doc)
+                check(scope,'서명',sig,detail,code='signature')
+                with span('issuer_and_structure', scope):
+                    trusted=isinstance(issuer,str) and typ in TRUSTED.get(issuer,set())
+                    check(scope,'발급자','pass' if trusted else 'fail','명시된 데모 발급자·유형 대조 (공식 신뢰목록 아님)',code='issuer')
+                    append_rows(scope,[header_check(h,p,typ)])
+                    ctx=p.get('@context',[])
+                    if isinstance(ctx,str): ctx=[ctx]
+                    types=p.get('type',[])
+                    if isinstance(types,str): types=[types]
+                    shape=isinstance(ctx,list) and 'https://www.w3.org/ns/credentials/v2' in ctx and trusted
+                    if typ!='VerifiablePresentation':
+                        shape=shape and 'VerifiableCredential' in types and isinstance(p.get('credentialSubject'),dict) and is_iri(p.get('id')) and is_iri(p.get('credentialSubject',{}).get('id'))
+                    check(scope,'기본 구조','pass' if shape else 'fail','VC/VP 유형·context·식별자·subject 구조 확인',code='structure')
+                tr,te=time_checks(h,p,now); append_rows(scope,tr); limits.extend(te)
+                if typ=='VerifiablePresentation':
+                    check(scope,'VP 식별자','pass' if is_iri(p.get('id')) else 'warning','샘플 VP는 id가 없을 수 있음; 라이브 인증용 VP로 취급하지 않음',False,'vp_id')
+                    check(scope,'소유자 인증','not_applicable','파일 가져오기에는 challenge/audience 기반 소유자 인증 미적용',False,'holder_binding')
+                elif isinstance(p.get('credentialSubject'),dict):
+                    st=p['credentialSubject'].get('type')
+                    if st is None:
+                        check(scope,'subject 유형','warning','샘플에는 subject.type이 없음; 공식 ICAM 정합성은 별도 보완 필요',False,'subject_type')
+                    else:
+                        st=st if isinstance(st,list) else [st]
+                        check(scope,'subject 유형','pass' if typ in st else 'fail','명시된 subject.type과 이 프로필 유형 대조',True,'subject_type')
+                if sig=='pass' and shape:
+                    append_rows(scope,[schema_check(p,typ)])
+                    if typ!='VerifiablePresentation':
+                        sr,se=status_checks(p,doc,policy,now,resource_fetcher,status_cache)
+                        append_rows(scope,sr); limits.extend(se)
+                    cache_key=(issuer,h['kid'])
+                    if cache_key in cert_cache:
+                        with span('certificate_cache', scope, cache_hit=True):
+                            pass
+                    if cache_key not in cert_cache:
+                        method=next(m for m in doc['verificationMethod'] if m.get('id')==h['kid'])
+                        # Separate context per job preserves request trace and parent span.
+                        cert_cache[cache_key]=cert_pool.submit(
+                            copy_context().run, certificate_checks,
+                            method,issuer,policy,now,resource_fetcher)
+                    # Preserve the original report order after all jobs finish.
+                    pending_cert_rows.append((checks,scope,cert_cache[cache_key]))
                 else:
-                    st=st if isinstance(st,list) else [st]
-                    check(scope,'subject 유형','pass' if typ in st else 'fail','명시된 subject.type과 이 프로필 유형 대조',True,'subject_type')
-            if sig=='pass' and shape:
-                append_rows(scope,[schema_check(p,typ)])
-                if typ!='VerifiablePresentation':
-                    sr,se=status_checks(p,doc,policy,now,resource_fetcher,status_cache)
-                    append_rows(scope,sr); limits.extend(se)
-                cache_key=(issuer,h['kid'])
-                if cache_key in cert_cache:
-                    with span('certificate_cache', scope, cache_hit=True):
-                        pass
-                if cache_key not in cert_cache:
-                    method=next(m for m in doc['verificationMethod'] if m.get('id')==h['kid'])
-                    cert_cache[cache_key]=certificate_checks(method,issuer,policy,now,resource_fetcher)
-                cr,ce=cert_cache[cache_key]; append_rows(scope,cr)
+                    check(scope,'후속 검사','unknown','서명·구조 검사 실패로 스키마·인증서·상태 조회를 진행하지 않음',True,'dependent_checks')
+        with span('certificate_parallel_wait', ''):
+            for rows,scope,future in pending_cert_rows:
+                cr,ce = future.result()
+                rows.extend(dict(scope=scope,**r) for r in cr)
                 if ce: limits.append(ce)
-            else:
-                check(scope,'후속 검사','unknown','서명·구조 검사 실패로 스키마·인증서·상태 조회를 진행하지 않음',True,'dependent_checks')
+    checks = [row for index in range(len(docs)) for row in document_checks[index]]
     with span('set_cross_checks', ''):
         check('세트','공식 SHACL','unknown','포털 자체 부분집합만 적용; 공식 버전별 전체 SHACL 미구현',False,'official_shacl')
         groups = {t: [d for d in docs if d['kind'] == t] for t in REQUIRED}

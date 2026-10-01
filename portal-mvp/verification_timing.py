@@ -1,4 +1,4 @@
-"""Request-local timings. Parent durations include children; parallel rows overlap."""
+"""Request-local timings. Parallel rows overlap; async children may outlive their parent spans."""
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
@@ -38,7 +38,7 @@ class Trace:
             return dict(total_ms=round((perf_counter()-self.start)*1000, 3),
                         rows=[{k:round(v,3) if isinstance(v,float) else v for k,v in r.items()}
                               for r in self.rows],
-                        note='Parent rows include child times; parallel rows overlap. Do not sum all rows.')
+                        note='Parallel rows overlap. Async certificate jobs may outlive document_total; verification_total includes their completion. Do not sum all rows.')
 
 @contextmanager
 def activate(trace):
