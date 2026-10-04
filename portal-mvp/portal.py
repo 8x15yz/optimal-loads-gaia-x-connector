@@ -757,7 +757,7 @@ def require_admin(authorization):
     return acc
 
 DEFAULT_PARTICIPANT_SESSION_SECONDS = 86400
-MAX_PARTICIPANT_SESSION_SECONDS = 2592000
+MAX_PARTICIPANT_SESSION_SECONDS = 7776000
 
 def participant_session_ttl():
     with db() as c:
