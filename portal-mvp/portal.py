@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from accounts import hash_password, valid_password, valid_username, verify_password
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
+from verification_support import USER_AGENT
 
 ROOT = Path(__file__).resolve().parent
 app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.9.0')
@@ -673,7 +674,7 @@ def transfer(req: TransferRequest, authorization: str = Header('')):
                 'notice': '연결 테스트용 고정 샘플이며 실제 기상 관측값이 아닙니다.'}
     else:
         try:
-            with httpx.Client(timeout=15, follow_redirects=False) as client:
+            with httpx.Client(timeout=15, follow_redirects=False, headers={'User-Agent': USER_AGENT}) as client:
                 with client.stream('GET', service['data_url']) as r:
                     r.raise_for_status()
                     body = b''
@@ -1158,7 +1159,7 @@ def fixed_access(key: str, service_id: str, path: str, request: Request):
     stages.append({'name':'데이터 경로 허용','status':'pass'})
     url=origin+target_path
     try:
-        with httpx.Client(timeout=UPSTREAM_TIMEOUT,follow_redirects=False) as client:
+        with httpx.Client(timeout=UPSTREAM_TIMEOUT,follow_redirects=False,headers={'User-Agent':USER_AGENT}) as client:
             with client.stream('GET',url,params=request.query_params.multi_items()) as r:
                 details['upstream_status']=r.status_code
                 if not 200<=r.status_code<300:

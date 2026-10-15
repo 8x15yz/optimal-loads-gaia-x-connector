@@ -19,6 +19,10 @@ from cryptography.x509.oid import ExtensionOID
 
 ROOT = Path(__file__).resolve().parent
 
+# 외부로 나가는 모든 요청에 붙이는 User-Agent. 상대 서버 로그에서 요청 출처를 Blue-X로 식별하기 위함.
+# 버전·주소가 바뀌면 이 기본값을 수정하거나 PORTAL_USER_AGENT 환경변수로 덮어씀.
+USER_AGENT = os.getenv('PORTAL_USER_AGENT', 'Blue-X/0.9.0 (+https://gaia-x-portal.bmap.kr)')
+
 @timed('policy_load', None)
 def load_policy():
     p = json.loads(Path(os.getenv('PORTAL_VERIFICATION_POLICY', str(ROOT / 'verification-policy.json'))).read_text())
@@ -46,7 +50,7 @@ def remote_bytes(url, allowed, max_bytes=256_000):
             return None
     # Standard TLS verification and administrator HTTP(S) proxy environment apply.
     # No redirects, embedded credentials or arbitrary credential-supplied URLs.
-    with build_opener(NoRedirect()).open(Request(url,headers={'Accept':'application/json, application/jwt, application/x-pem-file'}),timeout=8) as response:
+    with build_opener(NoRedirect()).open(Request(url,headers={'Accept':'application/json, application/jwt, application/x-pem-file','User-Agent':USER_AGENT}),timeout=8) as response:
         body=response.read(max_bytes+1)
         if len(body)>max_bytes:
             raise ValueError('원격 응답 크기 제한 초과')
