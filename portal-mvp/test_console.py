@@ -151,6 +151,19 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(r.status_code,200);self.assertEqual(r.json(),{'grid':[1,2]})
         self.assertEqual(str(seen[0].url),'https://weather.example/api/griddata?source=gfs&x=1&x=2')
         self.assertNotIn('authorization',seen[0].headers)
+        # 출처 식별 헤더: User-Agent, 활동 로그 ID와 같은 X-Request-ID, 계정 ID. 접속 키는 전달하지 않음
+        self.assertEqual(seen[0].headers['user-agent'],p.USER_AGENT)
+        self.assertEqual(seen[0].headers['x-request-id'],r.headers['x-activity-id'])
+        self.assertEqual(seen[0].headers['x-bluex-account'],self.state(0)['user']['id'])
+        key=url.split('/access/')[1].split('/')[0]
+        self.assertFalse(any(key in v for v in seen[0].headers.values()))
+        logs=self.client.get('/console/logs',headers=self.users[0]).json()
+        self.assertIn(r.headers['x-activity-id'],json.dumps(logs))
+
+    def test_version_and_user_agent_share_one_source(self):
+        self.assertEqual(p.app.version,p.APP_VERSION)
+        self.assertIn(f'Blue-X/{p.APP_VERSION}',p.USER_AGENT)
+        self.assertNotIn('35.212.206.187',p.PUBLIC_HOSTS)
 
     def test_legacy_endpoints_account_ownership(self):
         # Original endpoints remain guarded with the same ownership rules.

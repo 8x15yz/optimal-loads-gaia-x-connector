@@ -19,9 +19,13 @@ from cryptography.x509.oid import ExtensionOID
 
 ROOT = Path(__file__).resolve().parent
 
+# 포털 버전의 단일 기준값. FastAPI 앱 버전과 User-Agent가 모두 이 값을 사용함.
+APP_VERSION = '0.9.0'
+# 포털 공개 주소. User-Agent의 연락처 URL로 사용됨. 도메인이 바뀌면 PORTAL_PUBLIC_URL 환경변수로 지정.
+PUBLIC_URL = os.getenv('PORTAL_PUBLIC_URL', 'https://gaia-x-portal.bmap.kr').rstrip('/')
 # 외부로 나가는 모든 요청에 붙이는 User-Agent. 상대 서버 로그에서 요청 출처를 Blue-X로 식별하기 위함.
-# 버전·주소가 바뀌면 이 기본값을 수정하거나 PORTAL_USER_AGENT 환경변수로 덮어씀.
-USER_AGENT = os.getenv('PORTAL_USER_AGENT', 'Blue-X/0.9.0 (+https://gaia-x-portal.bmap.kr)')
+# 문자열 전체를 바꿔야 할 때만 PORTAL_USER_AGENT 환경변수로 덮어씀.
+USER_AGENT = os.getenv('PORTAL_USER_AGENT', f'Blue-X/{APP_VERSION} (+{PUBLIC_URL})')
 
 @timed('policy_load', None)
 def load_policy():

@@ -24,10 +24,10 @@ from pydantic import BaseModel, Field
 
 from accounts import hash_password, valid_password, valid_username, verify_password
 from credentials import MAX_TOTAL, PROFILE, date_value, inspect_set, read_uploads
-from verification_support import USER_AGENT
+from verification_support import APP_VERSION, USER_AGENT
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version='0.9.0')
+app = FastAPI(title='Blue-X · Trusted Data Transactions PoC', version=APP_VERSION)
 app.mount('/assets', StaticFiles(directory=ROOT / 'assets'), name='assets')
 app.state.port = 8000
 app.state.name = 'Blue-X'
@@ -36,7 +36,8 @@ app.state.resolver = None  # injection points for deterministic offline tests
 app.state.resource_fetcher = None
 app.state.verification_policy = None
 # 서버에서 명시적으로 허용하는 호스트/브라우저 origin.
-PUBLIC_HOSTS = {'35.212.206.187', 'gaia-x-portal.bmap.kr'} | {h.strip() for h in os.getenv('PORTAL_ALLOWED_HOSTS', '').split(',') if h.strip()}
+# 직접 IP 접속은 기본 허용하지 않음. 필요하면 PORTAL_ALLOWED_HOSTS로 추가.
+PUBLIC_HOSTS = {'gaia-x-portal.bmap.kr'} | {h.strip() for h in os.getenv('PORTAL_ALLOWED_HOSTS', '').split(',') if h.strip()}
 ALLOWED_HOSTS = {'localhost', '127.0.0.1', 'testserver'} | PUBLIC_HOSTS
 ORIGINS = {f'http://{h}:8000' for h in ({'localhost', '127.0.0.1'} | PUBLIC_HOSTS)}
 ORIGINS |= {f'https://{h}' for h in PUBLIC_HOSTS}
@@ -674,7 +675,7 @@ def transfer(req: TransferRequest, authorization: str = Header('')):
                 'notice': '연결 테스트용 고정 샘플이며 실제 기상 관측값이 아닙니다.'}
     else:
         try:
-            with httpx.Client(timeout=15, follow_redirects=False, headers={'User-Agent': USER_AGENT}) as client:
+            with httpx.Client(timeout=15, follow_redirects=False, headers=upstream_headers(session['account_id'])) as client:
                 with client.stream('GET', service['data_url']) as r:
                     r.raise_for_status()
                     body = b''
@@ -696,6 +697,20 @@ def audit_context(**values):
     if event is not None:
         event.update(values)
 
+def upstream_headers(account_id=None):
+    """데이터 API로 중계하는 요청의 헤더.
+
+    X-Request-ID는 이 요청의 활동 로그 ID(응답의 X-Activity-ID)와 같은 값임.
+    데이터 API 쪽 접근 로그에 이 값과 계정 ID를 남기면 콘솔 기록과 1:1로 대조할 수 있음.
+    접속 키·토큰 등 자격 정보는 넣지 않음.
+    """
+    event = AUDIT.get()
+    request_id = event.get('id') if event else None
+    headers = {'User-Agent': USER_AGENT, 'X-Request-ID': request_id or str(uuid.uuid4())}
+    if account_id:
+        headers['X-BlueX-Account'] = str(account_id)
+    return headers
+
 def audit_report(report):
     event = AUDIT.get()
     if event is not None:
@@ -714,7 +729,8 @@ async def activity_log(request: Request, call_next):
     path = request.url.path
     action = '/access/{key}/' + '/'.join(path.split('/')[3:]) if path.startswith('/access/') else path
     tracked = request.method == 'POST' or path.startswith('/access/')
-    event = {'action': request.method + ' ' + action, 'details': {}}
+    # id는 활동 로그 ID이자 데이터 API 중계 시 X-Request-ID로 전달되는 값
+    event = {'id': str(uuid.uuid4()), 'action': request.method + ' ' + action, 'details': {}}
     marker = AUDIT.set(event)
     started = time.monotonic()
     try:
@@ -724,7 +740,7 @@ async def activity_log(request: Request, call_next):
             if response.status_code >= 400: result = 'fail'
             details = event['details']
             details['http_status'] = response.status_code
-            ident = str(uuid.uuid4())
+            ident = event['id']
             with db() as c:
                 c.execute('INSERT INTO activity VALUES (?,?,?,?,?,?,?,?,?)',
                     (ident, time.time(), event.get('actor_id'), event.get('account_id'), event['action'], result,
@@ -1159,7 +1175,7 @@ def fixed_access(key: str, service_id: str, path: str, request: Request):
     stages.append({'name':'데이터 경로 허용','status':'pass'})
     url=origin+target_path
     try:
-        with httpx.Client(timeout=UPSTREAM_TIMEOUT,follow_redirects=False,headers={'User-Agent':USER_AGENT}) as client:
+        with httpx.Client(timeout=UPSTREAM_TIMEOUT,follow_redirects=False,headers=upstream_headers(row['account_id'])) as client:
             with client.stream('GET',url,params=request.query_params.multi_items()) as r:
                 details['upstream_status']=r.status_code
                 if not 200<=r.status_code<300:

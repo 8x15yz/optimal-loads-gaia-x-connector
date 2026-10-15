@@ -193,14 +193,28 @@ https://gaia-x-portal.bmap.kr/access/{고정키}/{service_id}
 
 ## 서버 노출 설정
 
-기본 허용 호스트에 `gaia-x-portal.bmap.kr`, `35.212.206.187`, localhost가 있습니다. 다른 호스트·브라우저 origin은 다음 환경변수로 지정합니다.
+기본 허용 호스트는 `gaia-x-portal.bmap.kr`과 localhost임. 이전 VM IP(`35.212.206.187`)는 제외했고, 서버 IP로 직접 접속해야 하면 `PORTAL_ALLOWED_HOSTS`에 추가함. 다른 호스트·브라우저 origin은 다음 환경변수로 지정합니다.
 
 - `PORTAL_ALLOWED_HOSTS`: 쉼표 구분 호스트명 (스킴 제외)
+- `PORTAL_PUBLIC_URL`: 포털 공개 주소 (기본 `https://gaia-x-portal.bmap.kr`). User-Agent의 연락처 URL로 사용됨
+- `PORTAL_USER_AGENT`: 외부 요청 User-Agent 문자열 전체를 덮어쓸 때만 지정 (기본 `Blue-X/{버전} (+{PORTAL_PUBLIC_URL})`)
 - `PORTAL_ALLOWED_ORIGINS`: 쉼표 구분 브라우저 origin (스킴·포트 포함)
 - `PORTAL_ALLOWED_DATA_ORIGINS`: 외부 데이터 API origin의 고정 기준선 (운영자 콘솔 등록분과 합산)
 - `PORTAL_ALLOWED_DATA_PATHS`: 외부 데이터 API 경로의 고정 기준선, 전체 URL 쉼표 구분 (운영자 콘솔 등록분과 합산, origin이 허용된 경우에만 유효)
 
-외부 제공 시 HTTPS reverse proxy를 사용하세요. 앱은 TLS 인증서 설치나 DNS 설정을 수행하지 않습니다. URL의 키를 로그에 남기지 않도록 `python portal.py` 실행의 Uvicorn access log를 끕니다. 다른 방식으로 실행하면 `--no-access-log`를 지정하세요. Nginx 등 앞단에서도 `/access/` 경로의 access log를 끄거나 키를 마스킹해야 합니다.
+외부 제공 시 HTTPS reverse proxy를 사용하세요. 앱은 TLS 인증서 설치나 DNS 설정을 수행하지 않습니다. URL의 키를 로그에 남기지 않도록 `python portal.py` 실행의 Uvicorn access log를 끕니다. 다른 방식으로 실행하면 `--no-access-log`를 지정하세요. Nginx 등 앞단에서도 `/access/` 경로의 access log를 끄거나 키를 마스킹해야 합니다. 마스킹 설정 예시는 `ops/nginx-blue-x-logging.conf`에 있음.
+
+### 데이터 API 요청 식별
+
+포털이 데이터 API(Weather API 등)로 보내는 요청에는 다음 헤더가 붙음. 접속 키·토큰 등 자격 정보는 전달하지 않음.
+
+| 헤더 | 값 | 용도 |
+|---|---|---|
+| `User-Agent` | `Blue-X/{버전} (+{공개 주소})` | 상대 서버 로그에서 출처를 Blue-X로 식별 |
+| `X-Request-ID` | 활동 로그 ID (이용자 응답의 `X-Activity-ID`와 동일) | 콘솔 활동 기록과 데이터 API 로그를 1:1로 대조 |
+| `X-BlueX-Account` | 요청한 계정 ID | 데이터 API 로그에서 이용 계정 구분 |
+
+데이터 API 쪽 Nginx 로그 형식에 `"$http_x_request_id" "$http_x_bluex_account"`를 추가하면 대조할 수 있음. 이용자(Web-ECDIS 등)가 오류를 문의할 때 응답의 `X-Activity-ID`를 알려주면 포털과 데이터 API 양쪽 기록을 바로 찾을 수 있음.
 
 PoC의 고정 주소 재표시를 위해 SQLite에 키 원문을 함께 저장합니다. DB 파일 접근을 제한하고 공유하지 마세요. 로그에는 비밀번호·원본 JWT·접속 키·쿼리·요청 본문·presigned URL을 기록하지 않습니다. 데이터 요청은 upstream 경로(쿼리 제외), HTTP 상태, 응답 크기, 발급 객체 키를 기록합니다. upstream 오류 메시지 앞 200자는 요약에 포함되므로 Weather API가 오류에 쿼리 값을 되돌려주면 그 값이 남을 수 있습니다. 로그는 SQLite에 보관되며 변조 방지 감사 저장소는 아닙니다.
 

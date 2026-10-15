@@ -1,3 +1,15 @@
+# 외부 요청 식별 정리 (User-Agent·요청 ID)
+
+- 앱 버전을 `verification_support.APP_VERSION` 한 곳에서 관리. FastAPI 앱 버전과 User-Agent가 같은 값을 사용함.
+- User-Agent 연락처 URL을 `PORTAL_PUBLIC_URL` 환경변수로 지정 가능 (기본 `https://gaia-x-portal.bmap.kr`).
+- 기본 허용 호스트에서 이전 VM IP `35.212.206.187` 제거. 필요 시 `PORTAL_ALLOWED_HOSTS`로 추가.
+- 데이터 API 중계 요청(`/access/...`, `/transfer`)에 `X-Request-ID`(활동 로그 ID와 동일), `X-BlueX-Account`(계정 ID) 헤더 추가. 접속 키는 전달하지 않음.
+- 활동 로그 ID를 요청 시작 시점에 발급하도록 변경. 이용자 응답의 `X-Activity-ID` 동작은 동일함.
+- `ops/nginx-blue-x-logging.conf` 추가: 포털 앞단 Nginx에서 `/access/{key}/`의 키를 마스킹하는 로그 형식 예시.
+
+배포: portal.py, verification_support.py 교체 후 서버 재시작. DB 변경 없음. 기존 data/ 및 환경 설정 보존.
+서버 IP(34.50.13.182)로 직접 접속하던 경우가 있다면 `PORTAL_ALLOWED_HOSTS=34.50.13.182`를 지정해야 함.
+
 # 운영자 참여 세션 시간 설정
 
 - 운영 관리 상단에서 참여 세션 시간을 정수 초로 저장 (1~7776000초, 기본 86400초).
